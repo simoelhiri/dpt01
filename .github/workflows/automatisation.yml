@@ -21,13 +21,9 @@ jobs:
         run: |
           pip install pandas numpy openpyxl
 
-      - name: 4. Executer l'Agent IA (Analyse & Predictions)
-        run: |
-          python agent_metaux.py
-
-      - name: 5. Envoyer le rapport par E-mail
+      - name: 4. Executer l'Agent IA & Envoi des Rapports
         env:
           MAIL_USER: ${{ secrets.MAIL_USER }}
           MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
         run: |
-          python send_email.py
+          python agent_metaux.py
