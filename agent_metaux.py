@@ -11,11 +11,14 @@ print("=== [ETAPE 1] Initialisation et chargement des accès ===")
 EMAIL_EXPEDITEUR = os.environ.get("MAIL_USER")
 EMAIL_MOT_DE_PASSE = os.environ.get("MAIL_PASSWORD")
 
+if not EMAIL_EXPEDITEUR or not EMAIL_MOT_DE_PASSE:
+    print("⚠️ ATTENTION : Les variables d'environnement MAIL_USER ou MAIL_PASSWORD ne sont pas définies !")
+
 date_jour = datetime.now()
 date_str = date_jour.strftime("%d-%m-%Y")
 taux_usd_mad = 9.34  # Taux de change USD/MAD
 
-# CATALOGUE MONDIAL AVEC PRÉCISION DU MARCHÉ (Local / Étranger) ET UNITÉS
+# CATALOGUE MONDIAL AVEC MARCHÉ (Local / Étranger) ET UNITÉS
 catalogue_mondial = {
     "Ferrailles & Aciers": {
         "Ferraille Massive (Local)": {"unite": "Tonne", "marche": "Local", "base_mad": 3150.0},
@@ -57,12 +60,11 @@ fichier_abonnes = "abonnes_db.csv"
 if os.path.exists(fichier_abonnes):
     df_abonnes = pd.read_csv(fichier_abonnes)
 else:
-    # Fichier par défaut avec choix de format (excel ou csv)
     df_abonnes = pd.DataFrame([
-        {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "TOUT", "format_souhaite": "excel", "debut": "01-01-2026", "fin": "31-12-2027"}
+        {"email": "test@example.com", "famille_souhaitee": "TOUT", "format_souhaite": "excel", "debut": "01-01-2026", "fin": "31-12-2027"}
     ])
 
-print("=== [ETAPE 3] Génération des prédictions (Format large & Décisions par date) ===")
+print("=== [ETAPE 3] Génération des données et prix (MAD local / USD converti) ===")
 np.random.seed(42)
 jours_prediction = [date_jour + timedelta(days=i) for i in range(8)]
 noms_colonnes_jours = [j.strftime("%d/%m/%Y") for j in jours_prediction]
@@ -75,10 +77,7 @@ for famille, produits_dict in catalogue_mondial.items():
         marche = info["marche"]
         unite = info["unite"]
         
-        if marche == "Local":
-            p_base = info["base_mad"]
-        else:
-            p_base = info["base_usd"]
+        p_base = info["base_mad"] if marche == "Local" else info["base_usd"]
             
         ligne_prix = []
         decisions_ligne = []
@@ -89,16 +88,15 @@ for famille, produits_dict in catalogue_mondial.items():
             prix_final = round(p_base if marche == "Local" else p_base * taux_usd_mad, 2)
             ligne_prix.append(prix_final)
             
-            # Décision d'achat journalière
             if prix_precedent is None:
                 decisions_ligne.append("WAIT")
             else:
                 if prix_final < prix_precedent:
-                    decisions_ligne.append("GO")       # Baisse = Bon plan achat
+                    decisions_ligne.append("GO")
                 elif prix_final == prix_precedent:
                     decisions_ligne.append("WAIT")
                 else:
-                    decisions_ligne.append("NO GO")    # Hausse = Éviter
+                    decisions_ligne.append("NO GO")
             prix_precedent = prix_final
             
         dictionnaire_ligne = {
@@ -119,24 +117,29 @@ for famille, produits_dict in catalogue_mondial.items():
 
 df_Complet = pd.DataFrame(donnees_globales)
 
-print("=== [ETAPE 4] Boucle de traitement et d'envoi filtré par abonné ===")
+print("=== [ETAPE 4] Boucle d'envoi personnalisée par abonné ===")
 for index, abonne in df_abonnes.iterrows():
     email_client = str(abonne["email"]).strip()
     famille_demandee = str(abonne["famille_souhaitee"]).strip()
+    
+    # Gestion sécurisée si la colonne format_souhaite n'est pas encore dans le CSV
     format_souhaite = str(abonne.get("format_souhaite", "excel")).strip().lower()
+    if format_souhaite not in ["excel", "csv"]:
+        format_souhaite = "excel"
+        
     date_fin_str = str(abonne["fin"]).strip()
     
     try:
         date_fin_abo = datetime.strptime(date_fin_str, "%d-%m-%Y")
     except Exception as err:
-        print(f"❌ Erreur format date pour {email_client}: {err}")
-        continue
+        print(f"⚠️ Date de fin invalide pour {email_client} ({date_fin_str}), abonnement considéré actif par défaut.")
+        date_fin_abo = datetime.now() + timedelta(days=365)
 
     if datetime.now() > date_fin_abo:
-        print(f"🔒 Abonné {email_client} expiré. Aucun envoi.")
+        print(f"🔒 Abonné {email_client} expiré (Fin : {date_fin_str}). Aucun envoi.")
         continue
         
-    # FILTRAGE STRICT PAR FAMILLE
+    # FILTRAGE PAR FAMILLE
     if famille_demandee.upper() == "TOUT":
         df_abonne = df_Complet.copy()
         decisions_abonne = decisions_globales_par_ligne
@@ -155,11 +158,11 @@ for index, abonne in df_abonnes.iterrows():
         nom_famille_mail = "Rapport Global"
         nom_fichier_clean = "Rapport_Global"
         
-    # GÉNÉRATION DU FICHIER SELON LE FORMAT SOUHAITÉ (EXCEL OU CSV POUR ERP)
+    # GÉNÉRATION DU FICHIER (CSV OU EXCEL)
     if format_souhaite == "csv":
         nom_fichier = f"veille_erp_{nom_fichier_clean}_{date_str}.csv"
         df_abonne.to_csv(nom_fichier, index=False, encoding="utf-8-sig")
-        print(f"📊 Fichier CSV généré pour l'ERP de {email_client}")
+        sub_type = "csv"
     else:
         nom_fichier = f"veille_marche_{nom_fichier_clean}_{date_str}.xlsx"
         wb = openpyxl.Workbook()
@@ -171,11 +174,11 @@ for index, abonne in df_abonnes.iterrows():
         for row in df_abonne.itertuples(index=False):
             ws.append(list(row))
             
-        fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")     # Vert
-        fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid") # Orange
-        fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid") # Rouge
+        fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+        fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+        fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
         
-        col_debut_dates = 6 # Index de la première colonne de date dans Excel (A=1)
+        col_debut_dates = 6
         for row_idx, decisions_ligne in enumerate(decisions_abonne, start=2):
             for col_offset, decision in enumerate(decisions_ligne):
                 cell = ws.cell(row=row_idx, column=col_debut_dates + col_offset)
@@ -183,27 +186,34 @@ for index, abonne in df_abonnes.iterrows():
                 elif decision == "WAIT": cell.fill = fill_wait
                 elif decision == "NO GO": cell.fill = fill_nogo
         wb.save(nom_fichier)
-        print(f"📂 Fichier Excel mis en forme généré pour {email_client}")
+        sub_type = "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # ENVOI DE L'E-MAIL PERSONNALISÉ
-    msg = EmailMessage()
-    msg['Subject'] = f"📊 Veille Stratégique ({famille_demandee}) - {date_str}"
-    msg['From'] = EMAIL_EXPEDITEUR
-    msg['To'] = email_client
-    msg.set_content(f"Bonjour,\n\nVoici ton rapport personnalisé de veille ({nom_famille_mail}) au format {format_souhaite.upper()}.\nLes prix locaux sont directement en MAD, et l'international est converti au taux de {taux_usd_mad}.\n\nCordialement,\nTon Agent IA de Veille")
-
-    with open(nom_fichier, "rb") as f:
-        file_data = f.read()
-    
-    sub_type = "csv" if format_souhaite == "csv" else "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    msg.add_attachment(file_data, maintype="application", subtype=sub_type, filename=nom_fichier)
-
+    # ENVOI E-MAIL
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
-            smtp.send_message(msg)
-        print(f"🎉 E-mail envoyé avec succès à {email_client} !")
-    except Exception as e:
-        print(f"❌ Erreur SMTP pour {email_client} : {e}")
+        msg = EmailMessage()
+        msg['Subject'] = f"📊 Veille Stratégique ({famille_demandee}) - {date_str}"
+        msg['From'] = EMAIL_EXPEDITEUR
+        msg['To'] = email_client
+        msg.set_content(
+            f"Bonjour,\n\n"
+            f"Voici ton rapport personnalisé de veille ({nom_famille_mail}) au format {format_souhaite.upper()}.\n"
+            f"Les prix locaux sont affichés en MAD et les importations en USD convertis.\n\n"
+            f"Cordialement,\nTon Agent IA de Veille"
+        )
 
-print("=== [FIN] Traitement global terminé avec succès ===")
+        with open(nom_fichier, "rb") as f:
+            file_data = f.read()
+        msg.add_attachment(file_data, maintype="application", subtype=sub_type, filename=nom_fichier)
+
+        if EMAIL_EXPEDITEUR and EMAIL_MOT_DE_PASSE:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+                smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
+                smtp.send_message(msg)
+            print(f"🎉 E-mail envoyé avec succès à {email_client} (Format : {format_souhaite.upper()}) !")
+        else:
+            print(f"🧪 Mode Simulation (Pas de mot de passe email configuré) - Fichier prêt pour {email_client}")
+            
+    except Exception as e:
+        print(f"❌ Erreur lors du traitement pour {email_client} : {e}")
+
+print("=== [FIN] Traitement terminé ===" )
