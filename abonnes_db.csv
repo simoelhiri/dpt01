@@ -1,4 +1,4 @@
-email,famille_souhaitee,debut,fin,format_souhaite
-melhiri@rivaindustries.ma,Ferrailles,01-01-2026,31-12-2027,csv
-simoelhiri@gmail.com,TOUT,01-01-2026,31-12-2027,excel
-justtalks@gmail.com,Métaux Non-Fereux,01-01-2025,01-01-2027,excel
+email,famille_souhaitee,format_souhaite,debut,fin
+melhiri@rivaindustries.ma,Ferrailles,csv,01-01-2026,31-12-2027
+simoelhiri@gmail.com,TOUT,excel,01-01-2026,31-12-2027
+justtalks@gmail.com,Métaux Non-Fereux,excel,01-01-2025,01-01-2027
