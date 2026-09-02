@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import PatternFill
 
-# Récupération sécurisée des accès e-mail depuis GitHub Secrets
+# Récupération sécurisée des accès e-mail
 EMAIL_EXPEDITEUR = os.environ.get("MAIL_USER")
 EMAIL_MOT_DE_PASSE = os.environ.get("MAIL_PASSWORD")
 
@@ -34,17 +34,16 @@ catalogue_mondial = {
     ]
 }
 
-# 2. LECTURE DE LA BASE DE DONNÉES DES ABONNÉS (Fichier externe CSV)
+# 2. LECTURE DE LA BASE DE DONNÉES DES ABONNÉS
 fichier_abonnes = "abonnes_db.csv"
 if os.path.exists(fichier_abonnes):
     df_abonnes = pd.read_csv(fichier_abonnes)
 else:
-    # Fichier de secours si le CSV n'existe pas encore
     df_abonnes = pd.DataFrame([
         {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "TOUT", "debut": "01-01-2026", "fin": "31-12-2027"}
     ])
 
-# 3. SIMULATION DES PRÉDICTIONS SUR 8 JOURS (J à J+7)
+# 3. GÉNÉRATION GLOBALE DES PRÉDICTIONS (8 JOURS)
 np.random.seed(42)
 jours_prediction = [date_jour + timedelta(days=i) for i in range(8)]
 historique_global = []
@@ -84,105 +83,101 @@ for famille, metaux in catalogue_mondial.items():
 df_Complet = pd.DataFrame(historique_global)
 historique_envois = []
 
-# 4. TRAITEMENT DE CHAQUE ABONNÉ DE LA BASE DE DONNÉES
+# 4. BOUCLE EXPLICITE D'INTERSECTION ET DE TRAITEMENT PAR ABONNÉ
+print("=== DÉBUT DU TRAITEMENT DES ABONNÉS ===")
 for index, abonne in df_abonnes.iterrows():
-    date_fin_abo = datetime.strptime(str(abonne["fin"]), "%d-%m-%Y")
-    email_client = str(abonne["email"])
-    famille_visee = str(abonne["famille_souhaitee"]).strip().upper() # Uniformisation en majuscules pour éviter les erreurs
+    email_client = str(abonne["email"]).strip()
+    famille_demandee = str(abonne["famille_souhaitee"]).strip()
+    date_fin_abo = datetime.strptime(str(abonne["fin"]).strip(), "%d-%m-%Y")
     
-    # VÉRIFICATION DE LA VALIDITÉ DE L'ABONNEMENT
-    if datetime.now() <= date_fin_abo:
-        
-        # Gestion intelligente du filtre selon ce qui est écrit dans le CSV
-        if "TOUT" in famille_visee or "ALL" in famille_visee:
-            df_abonne = df_Complet.copy()
-            nom_famille_clean = "TOUTES_FAMILLES"
-        elif "FERRAILLE" in famille_visee:
-            df_abonne = df_Complet[df_Complet["Famille"] == "Ferrailles & Aciers"].copy()
-            nom_famille_clean = "Ferrailles_Aciers"
-        elif "NON" in famille_visee or "FEREUX" in famille_visee:
-            df_abonne = df_Complet[df_Complet["Famille"] == "Métaux Non-Fereux"].copy()
-            nom_famille_clean = "Metaux_Non_Fereux"
-        elif "PRECIEUX" in famille_visee:
-            df_abonne = df_Complet[df_Complet["Famille"] == "Métaux Précieux"].copy()
-            nom_famille_clean = "Metaux_Precieux"
-        elif "PHOSPHATE" in famille_visee or "MINERAI" in famille_visee:
-            df_abonne = df_Complet[df_Complet["Famille"] == "Minéraux & Phosphates (Maroc & Global)"].copy()
-            nom_famille_clean = "Mineraux_Phosphates"
-        else:
-            df_abonne = df_Complet.copy() # Par défaut si non reconnu
-            nom_famille_clean = "Rapport_Global"
-
-        # Nom de fichier Excel propre et dynamique
-        nom_fichier = f"veille_metaux_{nom_famille_clean}_{date_str}.xlsx"
-        
-        # Génération du fichier Excel stylisé
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Prédictions 8J"
-        
-        headers = ["Date", "Famille", "Métal / Matière", "Prix (USD)", "Prix (MAD)", "Tendance (8J)", "Décision", "Lien Information"]
-        ws.append(headers)
-        
-        for row in df_abonne.itertuples(index=False):
-            ws.append(list(row))
-            
-        # Coloration conditionnelle (Vert = GO, Orange = WAIT, Rouge = NO GO)
-        fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
-        fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
-        fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
-        
-        for row_idx in range(2, len(df_abonne) + 2):
-            cell_conseil = ws.cell(row=row_idx, column=7)
-            val = cell_conseil.value
-            if val == "GO":
-                cell_conseil.fill = fill_go
-            elif val == "WAIT":
-                cell_conseil.fill = fill_wait
-            elif val == "NO GO":
-                cell_conseil.fill = fill_nogo
-                
-        wb.save(nom_fichier)
-        
-        # PRÉPARATION DE L'E-MAIL AVEC PIÈCE JOINTE
-        msg = EmailMessage()
-        msg['Subject'] = f"📊 Rapport Veille Métaux ({famille_visee}) - {date_str}"
-        msg['From'] = EMAIL_EXPEDITEUR
-        msg['To'] = email_client
-        msg.set_content(f"Bonjour,\n\nVoici ton rapport personnalisé de veille des métaux et d'aide à la décision d'achat pour la famille : {famille_visee}.\nTaux de change appliqué : 1 USD = {taux_usd_mad} MAD.\n\nCordialement,\nTon Agent IA de Veille")
-
-        with open(nom_fichier, "rb") as f:
-            file_data = f.read()
-            file_name = f.name
-        msg.add_attachment(file_data, maintype="application", subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=file_name)
-
-        # ENVOI EFFECTIF VIA SMTP GMAIL
-        try:
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-                smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
-                smtp.send_message(msg)
-            statut_envoi = "SUCCÈS (E-mail + PJ envoyés)"
-        except Exception as e:
-            statut_envoi = f"ERREUR : {e}"
-            
+    print(f"Traitement pour : {email_client} | Famille demandée : {famille_demandee}")
+    
+    # Vérification de l'abonnement
+    if datetime.now() > date_fin_abo:
+        print(f"-> ABONNEMENT EXPIRÉ pour {email_client}")
         historique_envois.append({
-            "Email": email_client,
-            "Famille": famille_visee,
-            "Fichier": nom_fichier,
-            "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            "Statut": statut_envoi
+            "Email": email_client, "Famille": famille_demandee, "Fichier": "AUCUN",
+            "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"), "Statut": "BLOQUÉ (Expiré)"
         })
+        continue # Passe à l'abonné suivant
+        
+    # Intersection et filtrage selon la famille demandée
+    if famille_demandee.upper() == "TOUT":
+        df_abonne = df_Complet.copy()
+        nom_famille_mail = "Toutes les Familles de Métaux"
+        nom_fichier_clean = "Toutes_Familles"
+    elif famille_demandee in catalogue_mondial.keys():
+        df_abonne = df_Complet[df_Complet["Famille"] == famille_demandee].copy()
+        nom_famille_mail = famille_demandee
+        nom_fichier_clean = famille_demandee.lower().replace(" & ", "_").replace(" ", "_").replace("(", "").replace(")", "")
     else:
-        # ABONNEMENT EXPIRÉ -> AUCUN ENVOI
-        historique_envois.append({
-            "Email": email_client,
-            "Famille": famille_visee,
-            "Fichier": "AUCUN",
-            "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            "Statut": "BLOQUÉ (Abonnement Expiré)"
-        })
+        # Si la famille demandée ne correspond exactement à rien, on prend tout par défaut
+        df_abonne = df_Complet.copy()
+        nom_famille_mail = "Rapport Global"
+        nom_fichier_clean = "Rapport_Global"
+        
+    # Création du fichier Excel unique pour cet abonné
+    nom_fichier = f"veille_metaux_{nom_fichier_clean}_{date_str}.xlsx"
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Prédictions 8J"
+    
+    headers = ["Date", "Famille", "Métal / Matière", "Prix (USD)", "Prix (MAD)", "Tendance (8J)", "Décision", "Lien Information"]
+    ws.append(headers)
+    
+    for row in df_abonne.itertuples(index=False):
+        ws.append(list(row))
+        
+    # Application des couleurs conditionnelles (Vert = GO, Orange = WAIT, Rouge = NO GO)
+    fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+    fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+    fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
+    
+    for row_idx in range(2, len(df_abonne) + 2):
+        cell_conseil = ws.cell(row=row_idx, column=7)
+        val = cell_conseil.value
+        if val == "GO":
+            cell_conseil.fill = fill_go
+        elif val == "WAIT":
+            cell_conseil.fill = fill_wait
+        elif val == "NO GO":
+            cell_conseil.fill = fill_nogo
+            
+    wb.save(nom_fichier)
+    
+    # Préparation de l'e-mail avec l'objet dynamique contenant la vraie famille
+    msg = EmailMessage()
+    msg['Subject'] = f"📊 Rapport Veille : {nom_famille_mail} - {date_str}"
+    msg['From'] = EMAIL_EXPEDITEUR
+    msg['To'] = email_client
+    msg.set_content(f"Bonjour,\n\nVoici ton rapport personnalisé de veille des métaux et d'aide à la décision pour la famille : {nom_famille_mail}.\nTaux de change appliqué : 1 USD = {taux_usd_mad} MAD.\n\nCordialement,\nTon Agent IA de Veille")
 
-# Export du fichier de log des envois
+    # Attachement sécurisé du fichier Excel généré
+    with open(nom_fichier, "rb") as f:
+        file_data = f.read()
+    msg.add_attachment(file_data, maintype="application", subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=nom_fichier)
+
+    # Envoi SMTP sécurisé
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
+            smtp.send_message(msg)
+        print(f"-> E-MAIL AVEC PJ ENVOYÉ avec succès à {email_client}")
+        statut_envoi = "SUCCÈS (E-mail + PJ)"
+    except Exception as e:
+        print(f"-> ERREUR lors de l'envoi à {email_client}: {e}")
+        statut_envoi = f"ERREUR : {e}"
+        
+    historique_envois.append({
+        "Email": email_client,
+        "Famille": nom_famille_mail,
+        "Fichier": nom_fichier,
+        "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+        "Statut": statut_envoi
+    })
+
+# Sauvegarde du fichier de log général
 df_logs = pd.DataFrame(historique_envois)
 df_logs.to_excel("historique_logs_envois.xlsx", index=False)
-print("Traitement des abonnements depuis la base de données et envois terminés avec succès !")
+print("=== FIN DU TRAITEMENT DE TOUS LES ABONNÉS ===")
