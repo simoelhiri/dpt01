@@ -232,10 +232,11 @@ for index, abonne in df_abonnes.iterrows():
         TITLE_FONT = Font(name="Calibri", size=14, bold=True, color="1F4E79")
         REGULAR_FONT = Font(name="Calibri", size=11)
         THIN_BORDER = Border(
-        left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'),
-        top=Side(style='thin', color='D9D9D9', bottom=Side(style='thin', color='D9D9D9')) # ❌ Erreur ici
-        )
-        # -------------------------------------------------------------
+            left=Side(style='thin', color='D9D9D9'), 
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'), 
+            bottom=Side(style='thin', color='D9D9D9') # ✔️ Correct
+        )        # -------------------------------------------------------------
         # ONGLET 1 : Comparatif par Date
         # -------------------------------------------------------------
         ws_date = wb.create_sheet(title="Comparatif par Date")
