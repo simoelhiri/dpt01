@@ -88,17 +88,33 @@ historique_envois = []
 for index, abonne in df_abonnes.iterrows():
     date_fin_abo = datetime.strptime(str(abonne["fin"]), "%d-%m-%Y")
     email_client = str(abonne["email"])
-    famille_visee = str(abonne["famille_souhaitee"])
+    famille_visee = str(abonne["famille_souhaitee"]).strip().upper() # Uniformisation en majuscules pour éviter les erreurs
     
     # VÉRIFICATION DE LA VALIDITÉ DE L'ABONNEMENT
     if datetime.now() <= date_fin_abo:
-        if famille_visee == "TOUT":
+        
+        # Gestion intelligente du filtre selon ce qui est écrit dans le CSV
+        if "TOUT" in famille_visee or "ALL" in famille_visee:
             df_abonne = df_Complet.copy()
+            nom_famille_clean = "TOUTES_FAMILLES"
+        elif "FERRAILLE" in famille_visee:
+            df_abonne = df_Complet[df_Complet["Famille"] == "Ferrailles & Aciers"].copy()
+            nom_famille_clean = "Ferrailles_Aciers"
+        elif "NON" in famille_visee or "FEREUX" in famille_visee:
+            df_abonne = df_Complet[df_Complet["Famille"] == "Métaux Non-Fereux"].copy()
+            nom_famille_clean = "Metaux_Non_Fereux"
+        elif "PRECIEUX" in famille_visee:
+            df_abonne = df_Complet[df_Complet["Famille"] == "Métaux Précieux"].copy()
+            nom_famille_clean = "Metaux_Precieux"
+        elif "PHOSPHATE" in famille_visee or "MINERAI" in famille_visee:
+            df_abonne = df_Complet[df_Complet["Famille"] == "Minéraux & Phosphates (Maroc & Global)"].copy()
+            nom_famille_clean = "Mineraux_Phosphates"
         else:
-            df_abonne = df_Complet[df_Complet["Famille"] == famille_visee].copy()
-            
-        # Nom de fichier Excel dynamique avec la date du jour
-        nom_fichier = f"veille_metaux_{famille_visee.replace(' & ', '_').replace(' ', '_')}_{date_str}.xlsx"
+            df_abonne = df_Complet.copy() # Par défaut si non reconnu
+            nom_famille_clean = "Rapport_Global"
+
+        # Nom de fichier Excel propre et dynamique
+        nom_fichier = f"veille_metaux_{nom_famille_clean}_{date_str}.xlsx"
         
         # Génération du fichier Excel stylisé
         wb = openpyxl.Workbook()
