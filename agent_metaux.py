@@ -15,7 +15,7 @@ date_jour = datetime.now()
 date_str = date_jour.strftime("%d-%m-%Y")
 taux_usd_mad = 9.34  # Taux de change USD/MAD explicite
 
-# 1. CATALOGUE MONDIAL COMPLET (Métaux + Énergies) ET LEURS UNITÉS DE RÉFÉRENCE
+# Catalogue mondial complet (Métaux + Énergies) et leurs unités
 catalogue_mondial = {
     "Ferrailles & Aciers": {
         "Ferraille Massive": "Tonne", "Ferraille Légère": "Tonne", "Ferraille E40": "Tonne", 
@@ -37,7 +37,6 @@ catalogue_mondial = {
     }
 }
 
-# Vrais liens web réels de référence par famille / matière
 liens_references = {
     "Ferrailles & Aciers": "https://www.lme.com/Metals/Ferrous",
     "Métaux Non-Fereux": "https://www.lme.com/Metals/Non-Ferrous",
@@ -55,7 +54,7 @@ else:
         {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "TOUT", "debut": "01-01-2026", "fin": "31-12-2027"}
     ])
 
-print("=== [ETAPE 3] Génération des prédictions format large (1 ligne par matière, 8 colonnes jours) ===")
+print("=== [ETAPE 3] Génération des prédictions (Format large avec décisions quotidiennes) ===")
 np.random.seed(42)
 jours_prediction = [date_jour + timedelta(days=i) for i in range(8)]
 noms_colonnes_jours = [j.strftime("%d/%m/%Y") for j in jours_prediction]
@@ -69,39 +68,48 @@ base_prices_usd = {
 }
 
 donnees_globales = []
+decisions_globales_par_ligne = [] # Pour stocker les décisions par jour et colorier après
 
 for famille, metaux_dict in catalogue_mondial.items():
     for metal, unite in metaux_dict.items():
         p_base = base_prices_usd[metal]
         ligne_prix_mad = []
+        decisions_ligne = []
         
+        prix_precedent = None
         for i in range(8):
             p_base += np.random.normal(0, p_base * 0.008)
             prix_mad = round(p_base * taux_usd_mad, 2)
             ligne_prix_mad.append(prix_mad)
             
-        # Tendance globale sur la période et conseil d'achat
-        tendance = "HAUSSIÈRE 📈" if ligne_prix_mad[-1] > ligne_prix_mad[0] else "BAISSIÈRE 📉"
-        conseil = "GO" if "BAISSIÈRE" in tendance else "NO GO"
-        
+            # Détermination de la décision d'achat journalière
+            if prix_precedent is None:
+                decisions_ligne.append("WAIT") # Premier jour de référence
+            else:
+                if prix_mad < prix_precedent:
+                    decisions_ligne.append("GO")       # Baisse de prix = Opportunité d'achat
+                elif prix_mad == prix_precedent:
+                    decisions_ligne.append("WAIT")     # Stabilité
+                else:
+                    decisions_ligne.append("NO GO")    # Hausse de prix = Éviter l'achat
+            prix_precedent = prix_mad
+            
         dictionnaire_ligne = {
             "Famille": famille,
             "Matière / Produit": metal,
             "Unité": unite,
             "Cours Change (USD/MAD)": taux_usd_mad,
         }
-        # Ajout des 8 colonnes de dates dynamiques
+        
         for idx, nom_col in enumerate(noms_colonnes_jours):
             dictionnaire_ligne[nom_col] = ligne_prix_mad[idx]
             
-        dictionnaire_ligne["Tendance Globale"] = tendance
-        dictionnaire_ligne["Décision Achat"] = conseil
         dictionnaire_ligne["Lien Source Réel"] = liens_references[famille]
         
         donnees_globales.append(dictionnaire_ligne)
+        decisions_globales_par_ligne.append(decisions_ligne)
 
 df_Complet = pd.DataFrame(donnees_globales)
-historique_envois = []
 
 print("=== [ETAPE 4] Boucle de traitement et d'envoi par abonné ===")
 for index, abonne in df_abonnes.iterrows():
@@ -122,50 +130,60 @@ for index, abonne in df_abonnes.iterrows():
     # Filtrage par famille
     if famille_demandee.upper() == "TOUT":
         df_abonne = df_Complet.copy()
+        decisions_abonne = decisions_globales_par_ligne
         nom_famille_mail = "Toutes les Familles (Métaux & Énergies)"
         nom_fichier_clean = "Toutes_Familles"
     elif famille_demandee in catalogue_mondial.keys():
-        df_abonne = df_Complet[df_Complet["Famille"] == famille_demandee].copy()
+        indices_famille = [i for i, row in enumerate(donnees_globales) if row["Famille"] == famille_demandee]
+        df_abonne = df_Complet.iloc[indices_famille].copy()
+        decisions_abonne = [decisions_globales_par_ligne[i] for i in indices_famille]
         nom_famille_mail = famille_demandee
         nom_fichier_clean = famille_demandee.lower().replace(" & ", "_").replace(" ", "_")
     else:
         df_abonne = df_Complet.copy()
+        decisions_abonne = decisions_globales_par_ligne
         nom_famille_mail = "Rapport Global"
         nom_fichier_clean = "Rapport_Global"
         
     nom_fichier = f"veille_marche_{nom_fichier_clean}_{date_str}.xlsx"
     
-    # Création du fichier Excel mis en forme
+    # Création du fichier Excel
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Prédictions 8J"
+    ws.title = "Prédictions 8J & Décisions"
     
     headers = list(df_abonne.columns)
     ws.append(headers)
+    
     for row in df_abonne.itertuples(index=False):
         ws.append(list(row))
         
-    # Couleurs conditionnelles (Colonne Décision Achat)
-    fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
-    fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
-    fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
+    # Couleurs conditionnelles par cellule de date selon la décision journalière
+    fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")     # Vert (Achat favorable)
+    fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid") # Orange/Jaune (Neutre/Stable)
+    fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid") # Rouge (Défavorable)
     
-    col_decision_idx = headers.index("Décision Achat") + 1
-    for row_idx in range(2, len(df_abonne) + 2):
-        cell_conseil = ws.cell(row=row_idx, column=col_decision_idx)
-        val = cell_conseil.value
-        if val == "GO": cell_conseil.fill = fill_go
-        elif val == "WAIT": cell_conseil.fill = fill_wait
-        elif val == "NO GO": cell_conseil.fill = fill_nogo
-            
+    # Les colonnes de dates commencent à l'index 5 (après Famille, Matiere, Unite, Cours Change)
+    col_debut_dates = 5
+    
+    for row_idx, decisions_ligne in enumerate(decisions_abonne, start=2):
+        for col_offset, decision in enumerate(decisions_ligne):
+            cell = ws.cell(row=row_idx, column=col_debut_dates + col_offset)
+            if decision == "GO":
+                cell.fill = fill_go
+            elif decision == "WAIT":
+                cell.fill = fill_wait
+            elif decision == "NO GO":
+                cell.fill = fill_nogo
+                
     wb.save(nom_fichier)
 
-    # Envoi e-mail avec objet dynamique reprenant la famille
+    # Envoi e-mail avec PJ
     msg = EmailMessage()
     msg['Subject'] = f"📊 Rapport Veille Stratégique : {nom_famille_mail} - {date_str}"
     msg['From'] = EMAIL_EXPEDITEUR
     msg['To'] = email_client
-    msg.set_content(f"Bonjour,\n\nVoici ton rapport horizontal de veille des marchés (Métaux & Énergies) pour la famille : {nom_famille_mail}.\nTaux de change appliqué : 1 USD = {taux_usd_mad} MAD.\n\nCordialement,\nTon Agent IA de Veille")
+    msg.set_content(f"Bonjour,\n\nVoici ton rapport horizontal avec décisions d'achat journalières (colorées par date) pour la famille : {nom_famille_mail}.\nTaux de change appliqué : 1 USD = {taux_usd_mad} MAD.\n\nCordialement,\nTon Agent IA de Veille")
 
     with open(nom_fichier, "rb") as f:
         file_data = f.read()
@@ -175,7 +193,7 @@ for index, abonne in df_abonnes.iterrows():
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
             smtp.send_message(msg)
-        print(f"🎉 E-mail avec PJ envoyé avec succès à {email_client} pour la famille '{nom_famille_mail}'")
+        print(f"🎉 E-mail avec PJ (décisions journalières colorées) envoyé à {email_client}")
     except Exception as e:
         print(f"❌ Erreur SMTP pour {email_client} : {e}")
 
