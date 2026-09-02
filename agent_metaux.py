@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import PatternFill
 
-# Identifiants e-mail récupérés de GitHub Secrets
+# Récupération sécurisée des accès e-mail depuis GitHub Secrets
 EMAIL_EXPEDITEUR = os.environ.get("MAIL_USER")
 EMAIL_MOT_DE_PASSE = os.environ.get("MAIL_PASSWORD")
 
@@ -34,13 +34,15 @@ catalogue_mondial = {
     ]
 }
 
-# 2. GESTION DES ABONNÉS (Base de données avec dates de début et fin d'abonnement)
-# Note: Mets ton propre e-mail ici pour tester la réception de la PJ !
-base_abonnes = [
-    {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "Ferrailles & Aciers", "debut": "01-01-2026", "fin": "31-12-2026"},
-    {"email": "client.vip.achats@gmail.com", "famille_souhaitee": "TOUT", "debut": "01-08-2026", "fin": "01-09-2027"},
-    {"email": "client.expire@gmail.com", "famille_souhaitee": "Métaux Non-Fereux", "debut": "01-01-2025", "fin": "01-01-2026"} # Abonnement expiré
-]
+# 2. LECTURE DE LA BASE DE DONNÉES DES ABONNÉS (Fichier externe CSV)
+fichier_abonnes = "abonnes_db.csv"
+if os.path.exists(fichier_abonnes):
+    df_abonnes = pd.read_csv(fichier_abonnes)
+else:
+    # Fichier de secours si le CSV n'existe pas encore
+    df_abonnes = pd.DataFrame([
+        {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "TOUT", "debut": "01-01-2026", "fin": "31-12-2027"}
+    ])
 
 # 3. SIMULATION DES PRÉDICTIONS SUR 8 JOURS (J à J+7)
 np.random.seed(42)
@@ -82,15 +84,14 @@ for famille, metaux in catalogue_mondial.items():
 df_Complet = pd.DataFrame(historique_global)
 historique_envois = []
 
-# 4. TRAITEMENT DES ABONNÉS, FILTRAGE, EXCEL & ENVOI E-MAIL AVEC PJ
-for abonne in base_abonnes:
-    date_fin_abo = datetime.strptime(abonne["fin"], "%d-%m-%Y")
-    email_client = abonne["email"]
+# 4. TRAITEMENT DE CHAQUE ABONNÉ DE LA BASE DE DONNÉES
+for index, abonne in df_abonnes.iterrows():
+    date_fin_abo = datetime.strptime(str(abonne["fin"]), "%d-%m-%Y")
+    email_client = str(abonne["email"])
+    famille_visee = str(abonne["famille_souhaitee"])
     
     # VÉRIFICATION DE LA VALIDITÉ DE L'ABONNEMENT
     if datetime.now() <= date_fin_abo:
-        famille_visee = abonne["famille_souhaitee"]
-        
         if famille_visee == "TOUT":
             df_abonne = df_Complet.copy()
         else:
@@ -127,7 +128,7 @@ for abonne in base_abonnes:
                 
         wb.save(nom_fichier)
         
-        # PRéPARATION DE L'E-MAIL AVEC PIÈCE JOINTE
+        # PRÉPARATION DE L'E-MAIL AVEC PIÈCE JOINTE
         msg = EmailMessage()
         msg['Subject'] = f"📊 Rapport Veille Métaux ({famille_visee}) - {date_str}"
         msg['From'] = EMAIL_EXPEDITEUR
@@ -159,7 +160,7 @@ for abonne in base_abonnes:
         # ABONNEMENT EXPIRÉ -> AUCUN ENVOI
         historique_envois.append({
             "Email": email_client,
-            "Famille": abonne["famille_souhaitee"],
+            "Famille": famille_visee,
             "Fichier": "AUCUN",
             "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
             "Statut": "BLOQUÉ (Abonnement Expiré)"
@@ -168,4 +169,4 @@ for abonne in base_abonnes:
 # Export du fichier de log des envois
 df_logs = pd.DataFrame(historique_envois)
 df_logs.to_excel("historique_logs_envois.xlsx", index=False)
-print("Traitement des abonnements et envois terminé avec succès !")
+print("Traitement des abonnements depuis la base de données et envois terminés avec succès !")
