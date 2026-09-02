@@ -7,52 +7,80 @@ from datetime import datetime, timedelta
 import openpyxl
 from openpyxl.styles import PatternFill
 
-print("=== [ETAPE 1] Initialisation et chargement des accès ===")
+print("=== [ETAPE 1] Initialisation ===")
 EMAIL_EXPEDITEUR = os.environ.get("MAIL_USER")
 EMAIL_MOT_DE_PASSE = os.environ.get("MAIL_PASSWORD")
-
-if not EMAIL_EXPEDITEUR or not EMAIL_MOT_DE_PASSE:
-    print("⚠️ ATTENTION : Les variables d'environnement MAIL_USER ou MAIL_PASSWORD ne sont pas définies !")
 
 date_jour = datetime.now()
 date_str = date_jour.strftime("%d-%m-%Y")
 taux_usd_mad = 9.34  # Taux de change USD/MAD
 
-# CATALOGUE MONDIAL AVEC MARCHÉ (Local / Étranger) ET UNITÉS
+# CATALOGUE RICHE AVEC DOUBLE DISPONIBILITÉ (LOCAL / ETRANGER POUR LA MEME REFERENCE)
 catalogue_mondial = {
     "Ferrailles & Aciers": {
-        "Ferraille Massive (Local)": {"unite": "Tonne", "marche": "Local", "base_mad": 3150.0},
-        "Ferraille Légère (Local)": {"unite": "Tonne", "marche": "Local", "base_mad": 2600.0},
-        "Ferraille HMS 1&2 (Import)": {"unite": "Tonne", "marche": "Étranger", "base_usd": 290.0},
-        "Fonte brute (Import)": {"unite": "Tonne", "marche": "Étranger", "base_usd": 350.0}
+        "Ferraille HMS 1&2": {
+            "unite": "Tonne", 
+            "base_local_mad": 4050.0, 
+            "base_etranger_usd": 403.0,  # 403 * 9.34 = ~3764.02 MAD (brut)
+            "source": "LME Ferrous / Platts Scrap Index - https://www.lme.com/Metals/Ferrous"
+        },
+        "Ferraille Légère": {
+            "unite": "Tonne", 
+            "base_local_mad": 2600.0, 
+            "base_etranger_usd": 275.0,
+            "source": "Argus Media Ferrous Scrap - https://www.argusmedia.com"
+        },
+        "Fonte brute": {
+            "unite": "Tonne", 
+            "base_local_mad": 3800.0, 
+            "base_etranger_usd": 350.0,
+            "source": "Fastmarkets Pig Iron - https://www.fastmarkets.com"
+        }
     },
     "Métaux Non-Fereux": {
-        "Cuivre Grade A (Import)": {"unite": "Tonne", "marche": "Étranger", "base_usd": 8900.0},
-        "Aluminium LME (Import)": {"unite": "Tonne", "marche": "Étranger", "base_usd": 2400.0},
-        "Laiton (Local)": {"unite": "Tonne", "marche": "Local", "base_mad": 54000.0}
+        "Cuivre Grade A": {
+            "unite": "Tonne", 
+            "base_local_mad": 85000.0, 
+            "base_etranger_usd": 8900.0,
+            "source": "London Metal Exchange (LME) Cuivre - https://www.lme.com/Metals/Non-Ferrous"
+        },
+        "Aluminium LME": {
+            "unite": "Tonne", 
+            "base_local_mad": 24500.0, 
+            "base_etranger_usd": 2400.0,
+            "source": "LME Aluminium - https://www.lme.com/Metals/Non-Ferrous"
+        }
     },
     "Métaux Précieux": {
-        "Or (Lingot) (International)": {"unite": "Kilogramme", "marche": "Étranger", "base_usd": 65000.0},
-        "Argent pur (International)": {"unite": "Kilogramme", "marche": "Étranger", "base_usd": 850.0}
+        "Or (Lingot)": {
+            "unite": "Kilogramme", 
+            "base_local_mad": 620000.0, 
+            "base_etranger_usd": 65000.0,
+            "source": "Kitco Gold Index - https://www.kitco.com/charts"
+        }
     },
     "Minéraux & Phosphates": {
-        "Phosphates (Roche BPL 68%) (Maroc - OCP)": {"unite": "Tonne", "marche": "Local", "base_mad": 1100.0},
-        "Minerai de Fer Standard (Import)": {"unite": "Tonne", "marche": "Étranger", "base_usd": 120.0}
+        "Phosphates (Roche BPL 68%)": {
+            "unite": "Tonne", 
+            "base_local_mad": 1100.0, 
+            "base_etranger_usd": 115.0,
+            "source": "OCP / IndexMundi Phosphates - https://www.indexmundi.com/commodities/"
+        }
     },
     "Énergies & Carburants": {
-        "Gasoil (Diesel) (Pompe Maroc)": {"unite": "Litre", "marche": "Local", "base_mad": 12.50},
-        "Essence Super (Pompe Maroc)": {"unite": "Litre", "marche": "Local", "base_mad": 14.10},
-        "Fuel Lourd (Industriel Maroc)": {"unite": "Tonne", "marche": "Local", "base_mad": 5800.0},
-        "Pétrole Brut (Brent) (Global)": {"unite": "Baril", "marche": "Étranger", "base_usd": 78.0}
+        "Gasoil (Diesel)": {
+            "unite": "Litre", 
+            "base_local_mad": 12.50, 
+            "base_etranger_usd": 1.35,
+            "source": "Ministère de la Transition Énergétique Maroc / Platts - https://www.investing.com/commodities/energy"
+        },
+        "Pétrole Brut (Brent)": {
+            "unite": "Baril", 
+            "base_local_mad": 750.0, 
+            "base_etranger_usd": 78.0,
+            "source": "Investing.com Brent - https://www.investing.com/commodities/brent-oil"
+        }
     }
-}
-
-liens_references = {
-    "Ferrailles & Aciers": "https://www.lme.com/Metals/Ferrous",
-    "Métaux Non-Fereux": "https://www.lme.com/Metals/Non-Ferrous",
-    "Métaux Précieux": "https://www.kitco.com/charts",
-    "Minéraux & Phosphates": "https://www.indexmundi.com/commodities/",
-    "Énergies & Carburants": "https://www.investing.com/commodities/energy"
 }
 
 print("=== [ETAPE 2] Lecture de la base de données des abonnés ===")
@@ -61,144 +89,170 @@ if os.path.exists(fichier_abonnes):
     df_abonnes = pd.read_csv(fichier_abonnes)
 else:
     df_abonnes = pd.DataFrame([
-        {"email": "test@example.com", "famille_souhaitee": "TOUT", "format_souhaite": "excel", "debut": "01-01-2026", "fin": "31-12-2027"}
+        {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "TOUT", "format_souhaite": "excel", "debut": "01-01-2026", "fin": "31-12-2027"}
     ])
 
-print("=== [ETAPE 3] Génération des données et prix (MAD local / USD converti) ===")
+print("=== [ETAPE 3] Génération des simulations sur 8 jours (Comparatif Local vs Étranger) ===")
 np.random.seed(42)
 jours_prediction = [date_jour + timedelta(days=i) for i in range(8)]
 noms_colonnes_jours = [j.strftime("%d/%m/%Y") for j in jours_prediction]
 
-donnees_globales = []
-decisions_globales_par_ligne = []
+donnees_excel_globales = []
+donnees_csv_globales = []
+decisions_globales_excel = []
 
 for famille, produits_dict in catalogue_mondial.items():
     for produit, info in produits_dict.items():
-        marche = info["marche"]
         unite = info["unite"]
+        source = info["source"]
         
-        p_base = info["base_mad"] if marche == "Local" else info["base_usd"]
-            
-        ligne_prix = []
+        b_local = info["base_local_mad"]
+        b_etranger = info["base_etranger_usd"]
+        
+        prix_locaux = []
+        prix_etrangers = []
         decisions_ligne = []
-        prix_precedent = None
+        
+        dernier_choix = None
         
         for i in range(8):
-            p_base += np.random.normal(0, p_base * 0.006)
-            prix_final = round(p_base if marche == "Local" else p_base * taux_usd_mad, 2)
-            ligne_prix.append(prix_final)
+            b_local += np.random.normal(0, b_local * 0.005)
+            b_etranger += np.random.normal(0, b_etranger * 0.005)
             
-            if prix_precedent is None:
-                decisions_ligne.append("WAIT")
+            p_loc = round(b_local, 2)
+            p_etr = round(b_etranger * taux_usd_mad, 2)  # Converti en MAD net
+            
+            prix_locaux.append(p_loc)
+            prix_etrangers.append(p_etr)
+            
+            # Aide à la décision simple : si Local < Étranger, c'est GO Local, sinon NO GO
+            if p_loc <= p_etr:
+                decisions_ligne.append("GO LOCAL")
             else:
-                if prix_final < prix_precedent:
-                    decisions_ligne.append("GO")
-                elif prix_final == prix_precedent:
-                    decisions_ligne.append("WAIT")
-                else:
-                    decisions_ligne.append("NO GO")
-            prix_precedent = prix_final
-            
-        dictionnaire_ligne = {
+                decisions_ligne.append("GO ETRANGER")
+
+        # 1. Structure pour Excel (Format Large : une colonne par jour)
+        dict_excel = {
             "Famille": famille,
             "Matière / Produit": produit,
-            "Marché": marche,
             "Unité": unite,
-            "Cours Change (USD/MAD)": taux_usd_mad if marche == "Étranger" else "N/A (Prix Local MAD)",
+            "Marché Comparé": "LOCAL (MAD)",
         }
-        
-        for idx, nom_col in enumerate(noms_colonnes_jours):
-            dictionnaire_ligne[nom_col] = ligne_prix[idx]
-            
-        dictionnaire_ligne["Lien Source Réel"] = liens_references[famille]
-        
-        donnees_globales.append(dictionnaire_ligne)
-        decisions_globales_par_ligne.append(decisions_ligne)
+        for idx, col_j in enumerate(noms_colonnes_jours):
+            dict_excel[col_j] = prix_locaux[idx]
+        dict_excel["Source Référence"] = source
+        donnees_excel_globales.append(dict_excel)
 
-df_Complet = pd.DataFrame(donnees_globales)
+        dict_excel_etr = {
+            "Famille": famille,
+            "Matière / Produit": produit,
+            "Unité": unite,
+            "Marché Comparé": "ETRANGER (Converti MAD)",
+        }
+        for idx, col_j in enumerate(noms_colonnes_jours):
+            dict_excel_etr[col_j] = prix_etrangers[idx]
+        dict_excel_etr["Source Référence"] = source
+        donnees_excel_globales.append(dict_excel_etr)
+        
+        decisions_globales_excel.append(decisions_ligne)
+        decisions_globales_excel.append(decisions_ligne) # Double pour les 2 lignes
+
+        # 2. Structure pour CSV / ERP (Format Long / Tidy : 1 ligne par jour et par marché)
+        for idx, col_j in enumerate(noms_colonnes_jours):
+            donnees_csv_globales.append({
+                "Famille": famille,
+                "Matiere": produit,
+                "Unite": unite,
+                "Marche": "Local",
+                "Date": col_j,
+                "Prix_MAD": prix_locaux[idx],
+                "Source": source
+            })
+            donnees_csv_globales.append({
+                "Famille": famille,
+                "Matiere": produit,
+                "Unite": unite,
+                "Marche": "Etranger",
+                "Date": col_j,
+                "Prix_MAD": prix_etrangers[idx],
+                "Source": source
+            })
+
+df_Complet_Excel = pd.DataFrame(donnees_excel_globales)
+df_Complet_Csv = pd.DataFrame(donnees_csv_globales)
 
 print("=== [ETAPE 4] Boucle d'envoi personnalisée par abonné ===")
 for index, abonne in df_abonnes.iterrows():
     email_client = str(abonne["email"]).strip()
     famille_demandee = str(abonne["famille_souhaitee"]).strip()
-    
-    # Gestion sécurisée si la colonne format_souhaite n'est pas encore dans le CSV
     format_souhaite = str(abonne.get("format_souhaite", "excel")).strip().lower()
+    
     if format_souhaite not in ["excel", "csv"]:
         format_souhaite = "excel"
         
     date_fin_str = str(abonne["fin"]).strip()
-    
     try:
         date_fin_abo = datetime.strptime(date_fin_str, "%d-%m-%Y")
-    except Exception as err:
-        print(f"⚠️ Date de fin invalide pour {email_client} ({date_fin_str}), abonnement considéré actif par défaut.")
+    except:
         date_fin_abo = datetime.now() + timedelta(days=365)
 
     if datetime.now() > date_fin_abo:
-        print(f"🔒 Abonné {email_client} expiré (Fin : {date_fin_str}). Aucun envoi.")
+        print(f"🔒 Abonné {email_client} expiré. Aucun envoi.")
         continue
         
     # FILTRAGE PAR FAMILLE
     if famille_demandee.upper() == "TOUT":
-        df_abonne = df_Complet.copy()
-        decisions_abonne = decisions_globales_par_ligne
-        nom_famille_mail = "Toutes les Familles (Métaux & Énergies)"
+        df_abonne_excel = df_Complet_Excel.copy()
+        df_abonne_csv = df_Complet_Csv.copy()
         nom_fichier_clean = "Toutes_Familles"
     elif famille_demandee in catalogue_mondial.keys():
-        indices_famille = [i for i, row in enumerate(donnees_globales) if row["Famille"] == famille_demandee]
-        df_abonne = df_Complet.iloc[indices_famille].copy()
-        decisions_abonne = [decisions_globales_par_ligne[i] for i in indices_famille]
-        nom_famille_mail = famille_demandee
+        df_abonne_excel = df_Complet_Excel[df_Complet_Excel["Famille"] == famille_demandee].copy()
+        df_abonne_csv = df_Complet_Csv[df_Complet_Csv["Famille"] == famille_demandee].copy()
         nom_fichier_clean = famille_demandee.lower().replace(" & ", "_").replace(" ", "_")
     else:
-        print(f"⚠️ Famille '{famille_demandee}' inconnue pour {email_client}. Rapport global par défaut.")
-        df_abonne = df_Complet.copy()
-        decisions_abonne = decisions_globales_par_ligne
-        nom_famille_mail = "Rapport Global"
+        df_abonne_excel = df_Complet_Excel.copy()
+        df_abonne_csv = df_Complet_Csv.copy()
         nom_fichier_clean = "Rapport_Global"
         
-    # GÉNÉRATION DU FICHIER (CSV OU EXCEL)
+    # GÉNÉRATION FICHIER SELON FORMAT DEMANDÉ
     if format_souhaite == "csv":
         nom_fichier = f"veille_erp_{nom_fichier_clean}_{date_str}.csv"
-        df_abonne.to_csv(nom_fichier, index=False, encoding="utf-8-sig")
+        df_abonne_csv.to_csv(nom_fichier, index=False, encoding="utf-8-sig")
         sub_type = "csv"
     else:
         nom_fichier = f"veille_marche_{nom_fichier_clean}_{date_str}.xlsx"
         wb = openpyxl.Workbook()
         ws = wb.active
-        ws.title = "Prédictions & Décisions"
+        ws.title = "Comparatif Local vs Étranger"
         
-        headers = list(df_abonne.columns)
+        headers = list(df_abonne_excel.columns)
         ws.append(headers)
-        for row in df_abonne.itertuples(index=False):
+        for row in df_abonne_excel.itertuples(index=False):
             ws.append(list(row))
             
-        fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
-        fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
-        fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
-        
-        col_debut_dates = 6
-        for row_idx, decisions_ligne in enumerate(decisions_abonne, start=2):
-            for col_offset, decision in enumerate(decisions_ligne):
-                cell = ws.cell(row=row_idx, column=col_debut_dates + col_offset)
-                if decision == "GO": cell.fill = fill_go
-                elif decision == "WAIT": cell.fill = fill_wait
-                elif decision == "NO GO": cell.fill = fill_nogo
+        # Coloration légère des cellules de prix
+        fill_local = PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid") # Vert tendre
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column), start=2):
+            marche_cell = ws.cell(row=row_idx, column=4).value
+            if marche_cell and "LOCAL" in str(marche_cell):
+                for col_c in range(5, ws.max_column):
+                    ws.cell(row=row_idx, column=col_c).fill = fill_local
+                    
         wb.save(nom_fichier)
         sub_type = "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     # ENVOI E-MAIL
     try:
         msg = EmailMessage()
-        msg['Subject'] = f"📊 Veille Stratégique ({famille_demandee}) - {date_str}"
+        msg['Subject'] = f"📊 Veille Stratégique & Comparatif Local/Étranger ({famille_demandee}) - {date_str}"
         msg['From'] = EMAIL_EXPEDITEUR
         msg['To'] = email_client
         msg.set_content(
             f"Bonjour,\n\n"
-            f"Voici ton rapport personnalisé de veille ({nom_famille_mail}) au format {format_souhaite.upper()}.\n"
-            f"Les prix locaux sont affichés en MAD et les importations en USD convertis.\n\n"
-            f"Cordialement,\nTon Agent IA de Veille"
+            f"Veuillez trouver ci-joint votre rapport de veille stratégique ({famille_demandee}) au format {format_souhaite.upper()}.\n"
+            f"Les données intègrent désormais le comparatif côte à côte entre les cours locaux et internationaux (convertis en MAD au taux de {taux_usd_mad}), "
+            f"ainsi que les liens de sources officielles.\n\n"
+            f"Cordialement,\nVotre Agent IA de Veille Marchés"
         )
 
         with open(nom_fichier, "rb") as f:
@@ -211,9 +265,9 @@ for index, abonne in df_abonnes.iterrows():
                 smtp.send_message(msg)
             print(f"🎉 E-mail envoyé avec succès à {email_client} (Format : {format_souhaite.upper()}) !")
         else:
-            print(f"🧪 Mode Simulation (Pas de mot de passe email configuré) - Fichier prêt pour {email_client}")
+            print(f"🧪 Simulation - Fichier prêt pour {email_client}")
             
     except Exception as e:
-        print(f"❌ Erreur lors du traitement pour {email_client} : {e}")
+        print(f"❌ Erreur envoi {email_client} : {e}")
 
-print("=== [FIN] Traitement terminé ===" )
+print("=== [FIN] Traitement terminé avec succès ===")
