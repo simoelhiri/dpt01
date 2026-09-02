@@ -1,14 +1,20 @@
+import os
+import smtplib
+from email.message import EmailMessage
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
+from openpyxl.styles import PatternFill
 
-# Date du jour
+# Identifiants e-mail récupérés de GitHub Secrets
+EMAIL_EXPEDITEUR = os.environ.get("MAIL_USER")
+EMAIL_MOT_DE_PASSE = os.environ.get("MAIL_PASSWORD")
+
+# Paramètres généraux
 date_jour = datetime.now()
 date_str = date_jour.strftime("%d-%m-%Y")
-taux_usd_mad = 9.34  # Taux de change USD/MAD du jour
+taux_usd_mad = 9.34  # Taux de change USD/MAD
 
 # 1. CATALOGUE MONDIAL DES MÉTAUX PAR FAMILLE
 catalogue_mondial = {
@@ -28,14 +34,15 @@ catalogue_mondial = {
     ]
 }
 
-# Base de données d'abonnés et leurs restrictions (Ciblage par famille)
+# 2. GESTION DES ABONNÉS (Base de données avec dates de début et fin d'abonnement)
+# Note: Mets ton propre e-mail ici pour tester la réception de la PJ !
 base_abonnes = [
-    {"email": "ferrailleur.pro@gmail.com", "famille_souhaitee": "Ferrailles & Aciers", "debut": "01-01-2026", "fin": "31-12-2026"},
-    {"email": "direction.achats@entreprise.com", "famille_souhaitee": "TOUT", "debut": "01-08-2026", "fin": "01-09-2027"},
-    {"email": "nonferreux.maroc@gmail.com", "famille_souhaitee": "Métaux Non-Fereux", "debut": "15-06-2026", "fin": "30-09-2026"}
+    {"email": EMAIL_EXPEDITEUR, "famille_souhaitee": "Ferrailles & Aciers", "debut": "01-01-2026", "fin": "31-12-2026"},
+    {"email": "client.vip.achats@gmail.com", "famille_souhaitee": "TOUT", "debut": "01-08-2026", "fin": "01-09-2027"},
+    {"email": "client.expire@gmail.com", "famille_souhaitee": "Métaux Non-Fereux", "debut": "01-01-2025", "fin": "01-01-2026"} # Abonnement expiré
 ]
 
-# 2. SIMULATION DE MARCHÉ & PRÉDICTIONS SUR 8 JOURS (J à J+7)
+# 3. SIMULATION DES PRÉDICTIONS SUR 8 JOURS (J à J+7)
 np.random.seed(42)
 jours_prediction = [date_jour + timedelta(days=i) for i in range(8)]
 historique_global = []
@@ -51,15 +58,12 @@ for famille, metaux in catalogue_mondial.items():
     for metal in metaux:
         p_base = base_prices_usd[metal]
         for i, jour in enumerate(jours_prediction):
-            # Variation simulée sur 8 jours
             p_base += np.random.normal(0, p_base * 0.008)
             prix_usd = round(p_base, 2)
             prix_mad = round(prix_usd * taux_usd_mad, 2)
             
-            # Tendances et Conseil GO / WAIT / NO GO
             if i == 0:
-                tendance = "STABLE ➡️"
-                conseil = "WAIT"
+                tendance, conseil = "STABLE ➡️", "WAIT"
             else:
                 tendance = "HAUSSIÈRE 📈" if i % 2 == 0 else "BAISSIÈRE 📉"
                 conseil = "GO" if "BAISSIÈRE" in tendance else "NO GO"
@@ -72,18 +76,18 @@ for famille, metaux in catalogue_mondial.items():
                 "Prix_MAD": prix_mad,
                 "Tendance": tendance,
                 "Conseil_Achat": conseil,
-                "Lien_Source": f"https://www.marche-metaux-global.com/index/{metal.lower().replace(' ', '-')}"
+                "Lien_Source": f"https://www.marche-metaux.com/index/{metal.lower().replace(' ', '-')}"
             })
 
 df_Complet = pd.DataFrame(historique_global)
-
-# 3. GENERATION DES FICHIERS EXCEL PAR ABONNE (Filtrés selon leurs droits)
 historique_envois = []
 
+# 4. TRAITEMENT DES ABONNÉS, FILTRAGE, EXCEL & ENVOI E-MAIL AVEC PJ
 for abonne in base_abonnes:
     date_fin_abo = datetime.strptime(abonne["fin"], "%d-%m-%Y")
+    email_client = abonne["email"]
     
-    # Vérification si l'abonnement est actif
+    # VÉRIFICATION DE LA VALIDITÉ DE L'ABONNEMENT
     if datetime.now() <= date_fin_abo:
         famille_visee = abonne["famille_souhaitee"]
         
@@ -92,24 +96,24 @@ for abonne in base_abonnes:
         else:
             df_abonne = df_Complet[df_Complet["Famille"] == famille_visee].copy()
             
-        nom_fichier = f"veille_metaux_{abonne['email'].split('@')[0]}_{date_str}.xlsx"
+        # Nom de fichier Excel dynamique avec la date du jour
+        nom_fichier = f"veille_metaux_{famille_visee.replace(' & ', '_').replace(' ', '_')}_{date_str}.xlsx"
         
-        # Création du fichier Excel avec mise en forme professionnelle
+        # Génération du fichier Excel stylisé
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Prédictions 8J"
         
-        # En-têtes
         headers = ["Date", "Famille", "Métal / Matière", "Prix (USD)", "Prix (MAD)", "Tendance (8J)", "Décision", "Lien Information"]
         ws.append(headers)
         
         for row in df_abonne.itertuples(index=False):
             ws.append(list(row))
             
-        # Styles et Couleurs (Vert pour GO, Orange pour WAIT, Rouge pour NO GO)
-        fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")     # Vert clair
-        fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")   # Orange/Jaune clair
-        fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")   # Rouge clair
+        # Coloration conditionnelle (Vert = GO, Orange = WAIT, Rouge = NO GO)
+        fill_go = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+        fill_wait = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
+        fill_nogo = PatternFill(start_color="F8D7DA", end_color="F8D7DA", fill_type="solid")
         
         for row_idx in range(2, len(df_abonne) + 2):
             cell_conseil = ws.cell(row=row_idx, column=7)
@@ -123,25 +127,45 @@ for abonne in base_abonnes:
                 
         wb.save(nom_fichier)
         
-        # Enregistrement dans l'historique des envois
+        # PRéPARATION DE L'E-MAIL AVEC PIÈCE JOINTE
+        msg = EmailMessage()
+        msg['Subject'] = f"📊 Rapport Veille Métaux ({famille_visee}) - {date_str}"
+        msg['From'] = EMAIL_EXPEDITEUR
+        msg['To'] = email_client
+        msg.set_content(f"Bonjour,\n\nVoici ton rapport personnalisé de veille des métaux et d'aide à la décision d'achat pour la famille : {famille_visee}.\nTaux de change appliqué : 1 USD = {taux_usd_mad} MAD.\n\nCordialement,\nTon Agent IA de Veille")
+
+        with open(nom_fichier, "rb") as f:
+            file_data = f.read()
+            file_name = f.name
+        msg.add_attachment(file_data, maintype="application", subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=file_name)
+
+        # ENVOI EFFECTIF VIA SMTP GMAIL
+        try:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+                smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
+                smtp.send_message(msg)
+            statut_envoi = "SUCCÈS (E-mail + PJ envoyés)"
+        except Exception as e:
+            statut_envoi = f"ERREUR : {e}"
+            
         historique_envois.append({
-            "Email": abonne["email"],
-            "Fichier_Envoye": nom_fichier,
-            "Date_Heure_Envoi": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-            "Statut": "SUCCÈS (Abonnement Actif)"
+            "Email": email_client,
+            "Famille": famille_visee,
+            "Fichier": nom_fichier,
+            "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "Statut": statut_envoi
         })
     else:
+        # ABONNEMENT EXPIRÉ -> AUCUN ENVOI
         historique_envois.append({
-            "Email": abonne["email"],
-            "Fichier_Envoye": "AUCUN",
-            "Date_Heure_Envoi": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+            "Email": email_client,
+            "Famille": abonne["famille_souhaitee"],
+            "Fichier": "AUCUN",
+            "Date_Heure": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
             "Statut": "BLOQUÉ (Abonnement Expiré)"
         })
 
-# Export de l'historique global des envois pour le contrôle
-df_suivi_envois = pd.DataFrame(historique_envois)
-df_suivi_envois.to_excel("historique_logs_envois.xlsx", index=False)
-
-print("=== RAPPORT : TRAITEMENT TERMINÉ AVEC SUCCÈS ===")
-print(f"Taux de change appliqué : 1 USD = {taux_usd_mad} MAD")
-print(f"Fichiers générés et logs mis à jour pour {len(base_abonnes)} abonnés.")
+# Export du fichier de log des envois
+df_logs = pd.DataFrame(historique_envois)
+df_logs.to_excel("historique_logs_envois.xlsx", index=False)
+print("Traitement des abonnements et envois terminé avec succès !")
