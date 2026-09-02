@@ -21,7 +21,7 @@ catalogue_mondial = {
         "Ferraille HMS 1&2": {
             "unite": "Tonne", 
             "base_local_mad": 4050.0, 
-            "base_etranger_usd": 403.0,  # 403 * 9.34 = ~3764.02 MAD (brut)
+            "base_etranger_usd": 403.0,  
             "source": "LME Ferrous / Platts Scrap Index - https://www.lme.com/Metals/Ferrous"
         },
         "Ferraille Légère": {
@@ -99,7 +99,6 @@ noms_colonnes_jours = [j.strftime("%d/%m/%Y") for j in jours_prediction]
 
 donnees_excel_globales = []
 donnees_csv_globales = []
-decisions_globales_excel = []
 
 for famille, produits_dict in catalogue_mondial.items():
     for produit, info in produits_dict.items():
@@ -111,9 +110,6 @@ for famille, produits_dict in catalogue_mondial.items():
         
         prix_locaux = []
         prix_etrangers = []
-        decisions_ligne = []
-        
-        dernier_choix = None
         
         for i in range(8):
             b_local += np.random.normal(0, b_local * 0.005)
@@ -124,25 +120,20 @@ for famille, produits_dict in catalogue_mondial.items():
             
             prix_locaux.append(p_loc)
             prix_etrangers.append(p_etr)
-            
-            # Aide à la décision simple : si Local < Étranger, c'est GO Local, sinon NO GO
-            if p_loc <= p_etr:
-                decisions_ligne.append("GO LOCAL")
-            else:
-                decisions_ligne.append("GO ETRANGER")
 
-        # 1. Structure pour Excel (Format Large : une colonne par jour)
-        dict_excel = {
+        # 1. Structure pour Excel (Ligne Local)
+        dict_excel_loc = {
             "Famille": famille,
             "Matière / Produit": produit,
             "Unité": unite,
             "Marché Comparé": "LOCAL (MAD)",
         }
         for idx, col_j in enumerate(noms_colonnes_jours):
-            dict_excel[col_j] = prix_locaux[idx]
-        dict_excel["Source Référence"] = source
-        donnees_excel_globales.append(dict_excel)
+            dict_excel_loc[col_j] = prix_locaux[idx]
+        dict_excel_loc["Source Référence"] = source
+        donnees_excel_globales.append(dict_excel_loc)
 
+        # 1. Structure pour Excel (Ligne Étranger)
         dict_excel_etr = {
             "Famille": famille,
             "Matière / Produit": produit,
@@ -153,11 +144,8 @@ for famille, produits_dict in catalogue_mondial.items():
             dict_excel_etr[col_j] = prix_etrangers[idx]
         dict_excel_etr["Source Référence"] = source
         donnees_excel_globales.append(dict_excel_etr)
-        
-        decisions_globales_excel.append(decisions_ligne)
-        decisions_globales_excel.append(decisions_ligne) # Double pour les 2 lignes
 
-        # 2. Structure pour CSV / ERP (Format Long / Tidy : 1 ligne par jour et par marché)
+        # 2. Structure pour CSV / ERP (Format Long / Tidy)
         for idx, col_j in enumerate(noms_colonnes_jours):
             donnees_csv_globales.append({
                 "Famille": famille,
@@ -230,28 +218,48 @@ for index, abonne in df_abonnes.iterrows():
         for row in df_abonne_excel.itertuples(index=False):
             ws.append(list(row))
             
-        # Coloration légère des cellules de prix
-        fill_local = PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid") # Vert tendre
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=1, max_col=ws.max_column), start=2):
-            marche_cell = ws.cell(row=row_idx, column=4).value
-            if marche_cell and "LOCAL" in str(marche_cell):
-                for col_c in range(5, ws.max_column):
-                    ws.cell(row=row_idx, column=col_c).fill = fill_local
+        # DÉFINITION DES COULEURS POUR L'AIDE À LA DÉCISION PAR DATE
+        fill_local_meilleur = PatternFill(start_color="E2F0D9", end_color="E2F0D9", fill_type="solid")   # Vert tendre (Local moins cher)
+        fill_etranger_meilleur = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid") # Bleu acier (Étranger moins cher)
+        
+        # Coloration dynamique cellule par cellule pour chaque paire de lignes (Local [ligne r] vs Étranger [ligne r+1])
+        total_rows = ws.max_row
+        for r in range(2, total_rows + 1, 2):
+            # r est la ligne Local, r+1 est la ligne Étranger
+            if r + 1 <= total_rows:
+                # Colonnes de date : de la colonne 5 (index E) jusqu'à la colonne 12 (index L pour 8 jours)
+                for col_idx in range(5, 5 + len(noms_colonnes_jours)):
+                    cell_loc = ws.cell(row=r, column=col_idx)
+                    cell_etr = ws.cell(row=r+1, column=col_idx)
                     
+                    val_loc = cell_loc.value
+                    val_etr = cell_etr.value
+                    
+                    if val_loc is not None and val_etr is not None:
+                        try:
+                            v_l = float(val_loc)
+                            v_e = float(val_etr)
+                            if v_l <= v_e:
+                                cell_loc.fill = fill_local_meilleur    # Le local gagne ce jour-là
+                            else:
+                                cell_etr.fill = fill_etranger_meilleur # L'étranger gagne ce jour-là
+                        except ValueError:
+                            pass
+                            
         wb.save(nom_fichier)
         sub_type = "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     # ENVOI E-MAIL
     try:
         msg = EmailMessage()
-        msg['Subject'] = f"📊 Veille Stratégique & Comparatif Local/Étranger ({famille_demandee}) - {date_str}"
+        msg['Subject'] = f"📊 Veille & Décision Achat (Local vs Étranger) ({famille_demandee}) - {date_str}"
         msg['From'] = EMAIL_EXPEDITEUR
         msg['To'] = email_client
         msg.set_content(
             f"Bonjour,\n\n"
             f"Veuillez trouver ci-joint votre rapport de veille stratégique ({famille_demandee}) au format {format_souhaite.upper()}.\n"
-            f"Les données intègrent désormais le comparatif côte à côte entre les cours locaux et internationaux (convertis en MAD au taux de {taux_usd_mad}), "
-            f"ainsi que les liens de sources officielles.\n\n"
+            f"Les tableaux Excel intègrent désormais une coloration dynamique par date : vert si le marché local est plus compétitif ce jour-là, "
+            f"ou bleu si l'importation est plus avantageuse.\n\n"
             f"Cordialement,\nVotre Agent IA de Veille Marchés"
         )
 
