@@ -18,7 +18,7 @@ date_str = date_jour.strftime("%d-%m-%Y")
 timestamp_str = date_jour.strftime("%Y-%m-%d %H:%M:%S")
 taux_usd_mad = 9.34
 
-# CATALOGUE OFFICIEL AVEC PRIX DU JOUR, SOURCES VÉRIFIÉES ET CONFIRMATIONS FOURNISSEURS
+# CATALOGUE OFFICIEL AVEC PRIX DU JOUR ET SOURCES VÉRIFIÉES
 catalogue_mondial = {
     "Ferrailles & Aciers": {
         "Ferraille HMS 1&2": {
@@ -111,7 +111,7 @@ for index, abonne in df_abonnes.iterrows():
     famille_demandee = str(abonne["famille_souhaitee"]).strip()
     format_souhaite = str(abonne.get("format_souhaite", "excel")).strip().lower()
     
-    # Personnalisation fine du nom/société pour le mail
+    # Personnalisation de la civilité pour le mail
     nom_abonne = str(abonne.get("nom", "")).strip()
     societe_abonne = str(abonne.get("societe", "")).strip()
     if nom_abonne and nom_abonne.lower() != "nan":
@@ -154,13 +154,11 @@ for index, abonne in df_abonnes.iterrows():
             for idx_j, j_date in enumerate(jours_prediction):
                 date_str_j = j_date.strftime("%d/%m/%Y")
                 
-                # Simulation stochastique locale et étrangère
                 variation_loc = np.random.normal(0, 0.007)
                 p_mad_local = round(p_jour_mad * (1 + variation_loc), 2)
                 p_usd_etranger = round(base_usd * (1 + np.random.normal(0, 0.006)), 2)
                 p_mad_etranger = round(p_usd_etranger * taux_usd_mad, 2)
                 
-                # Logique décisionnelle 3 couleurs
                 if variation_loc < -0.002:
                     tendance = "BAISSIÈRE 📉"
                     decision = "GO"
@@ -208,11 +206,9 @@ for index, abonne in df_abonnes.iterrows():
     HEADER_FILL = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
     HEADER_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     TITLE_FONT = Font(name="Calibri", size=14, bold=True, color="1F4E79")
-    REGULAR_FONT = Font(name="Calibri", size=11)
     ITALIC_DISCLAIMER_FONT = Font(name="Calibri", size=9, italic=True, color="595959")
     THIN_BORDER = Border(left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'), top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9'))
     
-    # Couleurs d'arrière-plan pour les statuts d'arbitrage
     FILL_GO = PatternFill(start_color="C6EFCE", end_color="C6EFCE", fill_type="solid")
     FONT_GO = Font(name="Calibri", size=11, bold=True, color="006100")
     
@@ -274,12 +270,11 @@ for index, abonne in df_abonnes.iterrows():
             ws_suivi.cell(row=r_row, column=c).border = THIN_BORDER
         r_row += 1
 
-    # Disclaimer légal en bas de feuille
     disc_row = r_row + 2
-    ws_suivi.cell(row=disc_row, column=2, value="* Avertissement Légal : Les données prévisionnelles J+i sont issues d'un modèle mathématique de simulation stochastique basé sur les tendances spot et macro-économiques. Elles constituent une aide à la décision et ne sauraient engager la responsabilité civile de l'éditeur sur les transactions commerciales exécutées.")
+    ws_suivi.cell(row=disc_row, column=2, value="* Avertissement Légal : Les données prévisionnelles J+i sont issues d'un modèle mathématique de simulation stochastique basé sur les tendances spot et macro-économiques.")
     ws_suivi.cell(row=disc_row, column=2).font = ITALIC_DISCLAIMER_FONT
 
-    # ONGLET 2 : Graphique d'Évolution Temporelle (Multi-séries avec références distinctes et couleurs propres)
+    # ONGLET 2 : Graphique Multi-Séries (Références distinctes)
     ws_graphe = wb.create_sheet(title="Graphique Évolution Tendance")
     ws_graphe.views.sheetView[0].showGridLines = True
     
@@ -289,12 +284,10 @@ for index, abonne in df_abonnes.iterrows():
     g_title.font = TITLE_FONT
     g_title.alignment = Alignment(horizontal="left", vertical="center")
     
-    # Pivot des données pour que chaque référence soit une colonne distincte (série de graphique)
     df_local_pivot = df_final_report[df_final_report["Marché"] == "Local"].pivot_table(
         index="Date", columns="Métal / Matière", values="Prix Simulé (MAD)"
     ).reset_index()
     
-    # Écriture de la table pivot sur l'onglet graphique
     r_gp = 4
     ws_graphe.cell(row=r_gp, column=2, value="Date")
     ref_cols_list = [col for col in df_local_pivot.columns if col != "Date"]
@@ -310,7 +303,6 @@ for index, abonne in df_abonnes.iterrows():
             cell_p.number_format = '#,##0.00'
         r_gp += 1
         
-    # Création du Graphique Linéaire multi-courbes
     chart = LineChart()
     chart.title = "Courbes d'Évolution Prévisionnelle des Prix en MAD par Référence"
     chart.style = 13
@@ -324,16 +316,15 @@ for index, abonne in df_abonnes.iterrows():
     chart.width = 25
     chart.height = 14
     
-    # Placement propre du graphique à côté des données
     ws_graphe.add_chart(chart, f"H4")
 
-    # Application rigoureuse de l'autosize sur TOUTES les colonnes de tous les onglets
+    # Application rigoureuse de l'autosize sur TOUTES les colonnes
     for ws in wb.worksheets:
         for col in ws.columns:
             col_letter = get_column_letter(col[0].column)
             max_len = 0
             for cell in col:
-                if cell.row == 2:  # Ignorer les titres fusionnés
+                if cell.row == 2:
                     continue
                 val_str = str(cell.value or '')
                 if len(val_str) > max_len:
@@ -343,7 +334,7 @@ for index, abonne in df_abonnes.iterrows():
     wb.save(nom_fichier)
     sub_type = "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # ENVOI E-MAIL AVEC HTML SOIGNÉ ET SALUTATION PERSONNALISÉE
+    # ENVOI E-MAIL AVEC TEXTE AÉRÉ EN LIGNES SIMPLES
     try:
         msg = EmailMessage()
         msg['Subject'] = f"📊 Veille Stratégique Métaux & Prévisions J+i (Date : {date_str})"
@@ -354,19 +345,25 @@ for index, abonne in df_abonnes.iterrows():
         <html>
           <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
             <p><b>Bonjour {civilite_mail},</b></p>
-            <p>Veuillez trouver ci-joint votre rapport d'analyse et de veille des métaux actualisé (<b>{famille_demandee}</b>) au format Excel, intégrant les tableaux de bord décisionnels, les prix du jour certifiés, les statuts d'arbitrage colorés et les graphiques multi-références en MAD.</p>
+            <p>Veuillez trouver ci-joint votre rapport de veille des métaux.</p>
+            <p>Ce fichier concerne la famille : <b>{famille_demandee}</b>.</p>
+            <p>Il intègre les tableaux de bord décisionnels et les prix du jour certifiés.</p>
+            <p>Retrouvez également les statuts d'arbitrage en couleur.</p>
+            <p>Un graphique multi-références en MAD est disponible sur la seconde feuille.</p>
             
             <hr style="border: none; border-top: 1px solid #dddddd; margin: 20px 0;">
             
             <p style="background-color: #f9f9f9; padding: 12px; border-left: 4px solid #1F4E79;">
-              <b>Note de transparence :</b> Afin de vous offrir un outil d'aide à la décision ultra-fiable pour vos arbitrages d'achats, notre modèle distingue clairement les cours observés au <i>Prix du Jour</i> (tendances spot confirmées par nos fournisseurs partenaires) de nos projections à moyen/long terme calculées via notre modèle macro-économique propriétaire.
+              <b>Note de transparence :</b><br>
+              Les cours observés au <i>Prix du Jour</i> proviennent de nos fournisseurs partenaires.<br>
+              Nos projections à moyen terme reposent sur un modèle macro-économique propriétaire.
             </p>
             
             <p style="font-size: 11px; color: #666666; font-style: italic;">
-              <b>Avertissement légal :</b> Les données portant la mention 'Prévisionnel Modélisé' sont fournies à des fins d'estimation stratégique et d'aide à la budgétisation. Elles ne constituent en aucun cas un engagement de prix ferme de notre part ou un conseil en investissement.
+              <b>Avertissement :</b> Ces données sont fournies à titre indicatif et ne constituent pas un engagement ferme.
             </p>
             
-            <p>Restant à votre entière disposition pour tout échange stratégique.</p>
+            <p>Restant à votre entière disposition.</p>
             
             <p>Bien cordialement,<br>
             <b>Votre Direction de l'Intelligence de Marché</b></p>
@@ -381,8 +378,6 @@ for index, abonne in df_abonnes.iterrows():
             file_data = f.read()
         msg.add_attachment(file_data, maintype="application", subtype=sub_type, filename=nom_fichier)
 
-        if EMAIL_EXPEDITEUR and EMAIL_MOT_DE_PASS: # Note: garde ta variable secure EMAIL_MOT_DE_PASSE
-            pass
         if EMAIL_EXPEDITEUR and EMAIL_MOT_DE_PASSE:
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
                 smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
