@@ -1,4 +1,4 @@
-email,famille_souhaitee,format_souhaite,statut,horizon_jours,paiement,facture,debut,fin
-melhiri@rivaindustries.ma,Ferrailles & Aciers,csv,ACTIF,30,Payé (Mensuel),Oui,01-01-2026,31-12-2027
-simoelhiri@gmail.com,TOUT,excel,ACTIF,365,Payé (Annuel),Oui,01-01-2026,31-12-2027
-justtalks@gmail.com,Métaux Non-Fereux,excel,INACTIF,8,Essai Gratuit,Non,01-01-2025,01-01-2027
+id_abonne,nom_societe,civilite,prenom_nom,email,famille_souhaitee,format_souhaite,statut,horizon_jours,paiement,facture,debut,fin
+1,Aciers du Maghreb,M.,Mohamed EL HIRI,simoelhiri@gmail.com,TOUT,excel,ACTIF,30,Payé,Oui,01/01/2026,31/12/2027
+2,Fonderie Moderne Casablanca,M.,EL HIRI,melhiri@rivaindustries.ma,Métaux Non-Fereux,excel,ACTIF,15,Essai,Non,01/06/2026,31/12/2026
+3,Justtalks,Société,Justt@lks,justtalks@gmail.com,Ferrailles & Aciers,csv,ACTIF,30,Payé,Oui,01/01/2026,31/12/2027
