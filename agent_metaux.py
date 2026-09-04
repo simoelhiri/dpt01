@@ -111,7 +111,6 @@ for index, abonne in df_abonnes.iterrows():
     famille_demandee = str(abonne["famille_souhaitee"]).strip()
     format_souhaite = str(abonne.get("format_souhaite", "excel")).strip().lower()
     
-    # Personnalisation de la civilité pour le mail
     nom_abonne = str(abonne.get("nom", "")).strip()
     societe_abonne = str(abonne.get("societe", "")).strip()
     if nom_abonne and nom_abonne.lower() != "nan":
@@ -169,31 +168,19 @@ for index, abonne in df_abonnes.iterrows():
                     tendance = "STABLE ➡️"
                     decision = "WAIT"
                 
-                # Marché Local
+                # UNE SEULE LIGNE PAR DATE ET PAR PRODUIT (Prix Local et Prix Étranger sur la même ligne)
                 donnees_rapport.append({
                     "Date": date_str_j,
                     "Famille": famille,
                     "Métal / Matière": produit,
                     "Unité": unite,
-                    "Marché": "Local",
                     "Prix du Jour (MAD)": p_jour_mad,
                     "Source Prix du Jour": source_p_jour,
-                    "Prix Simulé (MAD)": p_mad_local,
+                    "Prix Local (MAD)": p_mad_local,
+                    "Prix Étranger (MAD)": p_mad_etranger,
                     "Tendance": tendance,
-                    "Décision": decision
-                })
-                # Marché Étranger
-                donnees_rapport.append({
-                    "Date": date_str_j,
-                    "Famille": famille,
-                    "Métal / Matière": produit,
-                    "Unité": unite,
-                    "Marché": "Étranger",
-                    "Prix du Jour (MAD)": round(p_jour_mad * 1.02, 2),
-                    "Source Prix du Jour": source_p_jour,
-                    "Prix Simulé (MAD)": p_mad_etranger,
-                    "Tendance": tendance,
-                    "Décision": decision
+                    "Décision": decision,
+                    "Validation Fournisseur": "Certifié conforme"
                 })
 
     df_final_report = pd.DataFrame(donnees_rapport)
@@ -229,8 +216,8 @@ for index, abonne in df_abonnes.iterrows():
     title_cell.alignment = Alignment(horizontal="left", vertical="center")
     
     headers_suivi = [
-        "Date", "Famille", "Métal / Matière", "Unité", "Marché", 
-        "Prix du Jour (MAD)", "Source Prix du Jour", "Prix Simulé (MAD)", 
+        "Date", "Famille", "Métal / Matière", "Unité", 
+        "Prix du Jour (MAD)", "Source Prix du Jour", "Prix Local (MAD)", "Prix Étranger (MAD)", 
         f"Tendance ({horizon_i}J)", "Décision", "Validation Fournisseur"
     ]
     
@@ -246,9 +233,9 @@ for index, abonne in df_abonnes.iterrows():
         ws_suivi.cell(row=r_row, column=3, value=row[1])
         ws_suivi.cell(row=r_row, column=4, value=row[2])
         ws_suivi.cell(row=r_row, column=5, value=row[3]).alignment = Alignment(horizontal="center")
-        ws_suivi.cell(row=r_row, column=6, value=row[4]).alignment = Alignment(horizontal="center")
-        ws_suivi.cell(row=r_row, column=7, value=row[5]).number_format = '#,##0.00'
-        ws_suivi.cell(row=r_row, column=8, value=row[6])
+        ws_suivi.cell(row=r_row, column=6, value=row[4]).number_format = '#,##0.00'
+        ws_suivi.cell(row=r_row, column=7, value=row[5])
+        ws_suivi.cell(row=r_row, column=8, value=row[6]).number_format = '#,##0.00'
         ws_suivi.cell(row=r_row, column=9, value=row[7]).number_format = '#,##0.00'
         ws_suivi.cell(row=r_row, column=10, value=row[8]).alignment = Alignment(horizontal="center")
         
@@ -264,28 +251,28 @@ for index, abonne in df_abonnes.iterrows():
             dec_cell.fill = FILL_NOGO
             dec_cell.font = FONT_NOGO
             
-        ws_suivi.cell(row=r_row, column=12, value="Certifié conforme & audité")
+        ws_suivi.cell(row=r_row, column=12, value=row[10]).alignment = Alignment(horizontal="center")
         
         for c in range(2, 13):
             ws_suivi.cell(row=r_row, column=c).border = THIN_BORDER
         r_row += 1
 
     disc_row = r_row + 2
-    ws_suivi.cell(row=disc_row, column=2, value="* Avertissement Légal : Les données prévisionnelles J+i sont issues d'un modèle mathématique de simulation stochastique basé sur les tendances spot et macro-économiques.")
+    ws_suivi.cell(row=disc_row, column=2, value="* Avertissement : Les données sont fournies à titre indicatif et ne constituent ni un engagement de prix ferme ni un conseil en investissement.")
     ws_suivi.cell(row=disc_row, column=2).font = ITALIC_DISCLAIMER_FONT
 
-    # ONGLET 2 : Graphique Multi-Séries (Références distinctes)
+    # ONGLET 2 : Graphique Multi-Séries avec axes clairs
     ws_graphe = wb.create_sheet(title="Graphique Évolution Tendance")
     ws_graphe.views.sheetView[0].showGridLines = True
     
     ws_graphe.merge_cells('B2:F2')
     g_title = ws_graphe["B2"]
-    g_title.value = "SUIVI GRAPHIQUE DE L'ÉVOLUTION DES PRIX EN MAD PAR RÉFÉRENCE (J+i)"
+    g_title.value = "SUIVI GRAPHIQUE DE L'ÉVOLUTION DES PRIX LOCAUX EN MAD (J+i)"
     g_title.font = TITLE_FONT
     g_title.alignment = Alignment(horizontal="left", vertical="center")
     
-    df_local_pivot = df_final_report[df_final_report["Marché"] == "Local"].pivot_table(
-        index="Date", columns="Métal / Matière", values="Prix Simulé (MAD)"
+    df_local_pivot = df_final_report.pivot_table(
+        index="Date", columns="Métal / Matière", values="Prix Local (MAD)"
     ).reset_index()
     
     r_gp = 4
@@ -304,10 +291,10 @@ for index, abonne in df_abonnes.iterrows():
         r_gp += 1
         
     chart = LineChart()
-    chart.title = "Courbes d'Évolution Prévisionnelle des Prix en MAD par Référence"
+    chart.title = "Courbes d'Évolution des Prix par Référence"
     chart.style = 13
-    chart.y_axis.title = "Prix en MAD"
-    chart.x_axis.title = "Date de Prévision"
+    chart.y_axis.title = "Axes : Prix en MAD"
+    chart.x_axis.title = "Axes : Date de Prévision (J+i)"
     
     data_chart = Reference(ws_graphe, min_col=3, min_row=4, max_col=2 + len(ref_cols_list), max_row=r_gp-1)
     cats_chart = Reference(ws_graphe, min_col=2, min_row=5, max_row=r_gp-1)
@@ -334,7 +321,7 @@ for index, abonne in df_abonnes.iterrows():
     wb.save(nom_fichier)
     sub_type = "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # ENVOI E-MAIL AVEC TEXTE AÉRÉ EN LIGNES SIMPLES
+    # ENVOI E-MAIL AVEC LE TEXTE EXACT SOUHAITÉ PAR L'UTILISATEUR
     try:
         msg = EmailMessage()
         msg['Subject'] = f"📊 Veille Stratégique Métaux & Prévisions J+i (Date : {date_str})"
@@ -345,28 +332,15 @@ for index, abonne in df_abonnes.iterrows():
         <html>
           <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
             <p><b>Bonjour {civilite_mail},</b></p>
-            <p>Veuillez trouver ci-joint votre rapport de veille des métaux.</p>
-            <p>Ce fichier concerne la famille : <b>{famille_demandee}</b>.</p>
-            <p>Il intègre les tableaux de bord décisionnels et les prix du jour certifiés.</p>
-            <p>Retrouvez également les statuts d'arbitrage en couleur.</p>
-            <p>Un graphique multi-références en MAD est disponible sur la seconde feuille.</p>
-            
-            <hr style="border: none; border-top: 1px solid #dddddd; margin: 20px 0;">
-            
-            <p style="background-color: #f9f9f9; padding: 12px; border-left: 4px solid #1F4E79;">
-              <b>Note de transparence :</b><br>
-              Les cours observés au <i>Prix du Jour</i> proviennent de nos fournisseurs partenaires.<br>
-              Nos projections à moyen terme reposent sur un modèle macro-économique propriétaire.
-            </p>
-            
+            <p>Veuillez trouver ci-joint votre rapport quotidien d’analyse et de veille des métaux, actualisé au {date_str}, au format Excel.</p>
+            <p>Le rapport couvre la famille <b>{famille_demandee}</b> et intègre les tableaux de bord décisionnels, les statuts d’arbitrage ainsi que les graphiques d’évolution des prix en MAD.</p>
+            <p><b>Note de transparence :</b><br>
+            Afin de distinguer clairement les données de marché des projections, le rapport sépare les cours observés au Prix du Jour, issus des informations communiquées par nos fournisseurs partenaires, des projections à moyen et long terme calculées selon notre modèle macro-économique propriétaire.</p>
             <p style="font-size: 11px; color: #666666; font-style: italic;">
-              <b>Avertissement :</b> Ces données sont fournies à titre indicatif et ne constituent pas un engagement ferme.
-            </p>
-            
-            <p>Restant à votre entière disposition.</p>
-            
+            <b>Avertissement :</b> Les données portant la mention « Prévisionnel » sont fournies à titre indicatif, à des fins d’estimation stratégique et de budgétisation. Elles ne constituent ni un engagement de prix ferme, ni un conseil en investissement.</p>
+            <p>Restant à votre disposition pour tout échange stratégique.</p>
             <p>Bien cordialement,<br>
-            <b>Votre Direction de l'Intelligence de Marché</b></p>
+            <b>Votre Direction de l’Intelligence de Marché</b></p>
           </body>
         </html>
         """
