@@ -16,79 +16,28 @@ EMAIL_MOT_DE_PASSE = os.environ.get("MAIL_PASSWORD")
 date_jour = datetime.now()
 date_str = date_jour.strftime("%d-%m-%Y")
 timestamp_str = date_jour.strftime("%Y-%m-%d %H:%M:%S")
-taux_usd_mad = 9.34  # Taux de change de référence USD/MAD
+taux_usd_mad = 9.34
 
-# CATALOGUE COMPLET & OFFICIEL DE TES MATIÈRES
 catalogue_mondial = {
     "Ferrailles & Aciers": {
-        "Ferraille HMS 1&2": {
-            "unite": "Tonne", 
-            "base_local_mad": 4050.0, 
-            "base_etranger_usd": 403.0,  
-            "source": "LME Ferrous / Platts Scrap Index (www.lme.com)"
-        },
-        "Ferraille Légère": {
-            "unite": "Tonne", 
-            "base_local_mad": 2600.0, 
-            "base_etranger_usd": 275.0,
-            "source": "Argus Media Ferrous Scrap (www.argusmedia.com)"
-        },
-        "Fonte brute": {
-            "unite": "Tonne", 
-            "base_local_mad": 3800.0, 
-            "base_etranger_usd": 350.0,
-            "source": "Fastmarkets Pig Iron (www.fastmarkets.com)"
-        }
+        "Ferraille HMS 1&2": {"unite": "Tonne", "base_local_mad": 4050.0, "base_etranger_usd": 403.0, "source": "LME Ferrous / Platts"},
+        "Ferraille Légère": {"unite": "Tonne", "base_local_mad": 2600.0, "base_etranger_usd": 275.0, "source": "Argus Media"},
+        "Fonte brute": {"unite": "Tonne", "base_local_mad": 3800.0, "base_etranger_usd": 350.0, "source": "Fastmarkets"}
     },
     "Métaux Non-Fereux": {
-        "Cuivre Grade A": {
-            "unite": "Tonne", 
-            "base_local_mad": 85000.0, 
-            "base_etranger_usd": 8900.0,
-            "source": "London Metal Exchange (LME) Cuivre (www.lme.com)"
-        },
-        "Aluminium LME": {
-            "unite": "Tonne", 
-            "base_local_mad": 24500.0, 
-            "base_etranger_usd": 2400.0,
-            "source": "LME Aluminium (www.lme.com)"
-        },
-        "Zinc SHG": {
-            "unite": "Tonne", 
-            "base_local_mad": 28000.0, 
-            "base_etranger_usd": 2750.0,
-            "source": "LME Zinc (www.lme.com)"
-        }
+        "Cuivre Grade A": {"unite": "Tonne", "base_local_mad": 85000.0, "base_etranger_usd": 8900.0, "source": "LME Cuivre"},
+        "Aluminium LME": {"unite": "Tonne", "base_local_mad": 24500.0, "base_etranger_usd": 2400.0, "source": "LME Aluminium"},
+        "Zinc SHG": {"unite": "Tonne", "base_local_mad": 28000.0, "base_etranger_usd": 2750.0, "source": "LME Zinc"}
     },
     "Métaux Précieux": {
-        "Or (Lingot)": {
-            "unite": "Kilogramme", 
-            "base_local_mad": 620000.0, 
-            "base_etranger_usd": 65000.0,
-            "source": "Kitco Gold Index (www.kitco.com)"
-        }
+        "Or (Lingot)": {"unite": "Kilogramme", "base_local_mad": 620000.0, "base_etranger_usd": 65000.0, "source": "Kitco Gold"}
     },
     "Minéraux & Phosphates": {
-        "Phosphates (Roche BPL 68%)": {
-            "unite": "Tonne", 
-            "base_local_mad": 1100.0, 
-            "base_etranger_usd": 115.0,
-            "source": "OCP / IndexMundi Phosphates (www.indexmundi.com)"
-        }
+        "Phosphates (Roche BPL 68%)": {"unite": "Tonne", "base_local_mad": 1100.0, "base_etranger_usd": 115.0, "source": "OCP / IndexMundi"}
     },
     "Énergies & Carburants": {
-        "Gasoil (Diesel)": {
-            "unite": "Litre", 
-            "base_local_mad": 12.50, 
-            "base_etranger_usd": 1.35,
-            "source": "Ministère Transition Énergétique / Platts (www.investing.com)"
-        },
-        "Pétrole Brut (Brent)": {
-            "unite": "Baril", 
-            "base_local_mad": 750.0, 
-            "base_etranger_usd": 78.0,
-            "source": "Investing.com Brent (www.investing.com)"
-        }
+        "Gasoil (Diesel)": {"unite": "Litre", "base_local_mad": 12.50, "base_etranger_usd": 1.35, "source": "Ministère Transition Énergétique"},
+        "Pétrole Brut (Brent)": {"unite": "Baril", "base_local_mad": 750.0, "base_etranger_usd": 78.0, "source": "Investing.com Brent"}
     }
 }
 
@@ -96,20 +45,18 @@ print("=== [ETAPE 2] Lecture de la base de données des abonnés ===")
 fichier_abonnes = "abonnes_db.csv"
 
 if not os.path.exists(fichier_abonnes):
-    print("Erreur critique : Le fichier 'abonnes_db.csv' est introuvable dans le répertoire.")
+    print("Erreur critique : Le fichier 'abonnes_db.csv' est introuvable.")
     exit()
 
 df_abonnes = pd.read_csv(fichier_abonnes)
 traces_envois = []
 
-print("=== [ETAPE 3] Boucle d'envoi personnalisée et traçabilité ===")
+print("=== [ETAPE 3] Boucle d'envoi et Traçabilité Automatique ===")
 for index, abonne in df_abonnes.iterrows():
     email_client = str(abonne["email"]).strip()
     statut_abo = str(abonne.get("statut", "ACTIF")).strip().upper()
     
-    # Vérification du statut de l'abonné
     if statut_abo != "ACTIF":
-        print(f"🔒 Abonné {email_client} inactif ou suspendu (Statut: {statut_abo}). Aucun envoi.")
         continue
         
     famille_demandee = str(abonne["famille_souhaitee"]).strip()
@@ -130,12 +77,8 @@ for index, abonne in df_abonnes.iterrows():
         date_fin_abo = datetime.now() + timedelta(days=365)
 
     if datetime.now() > date_fin_abo:
-        print(f"🔒 Date de fin d'abonnement dépassée pour {email_client}. Aucun envoi.")
         continue
 
-    print(f"-> Traitement en cours pour {email_client} | Horizon J+{horizon_i} | Format: {format_souhaite.upper()}")
-
-    # Génération des simulations sur 'horizon_i' jours
     np.random.seed(42)
     jours_prediction = [date_jour + timedelta(days=d_idx) for d_idx in range(horizon_i)]
     noms_colonnes_jours = [j.strftime("%d/%m/%Y") for j in jours_prediction]
@@ -143,7 +86,6 @@ for index, abonne in df_abonnes.iterrows():
     donnees_date_globales = []
     donnees_csv_globales = []
     
-    # Filtrage du catalogue selon la demande de l'abonné
     if famille_demandee.upper() == "TOUT":
         cat_filtre = catalogue_mondial
         nom_fichier_clean = "Toutes_Familles"
@@ -158,7 +100,6 @@ for index, abonne in df_abonnes.iterrows():
         for produit, info in produits_dict.items():
             unite = info["unite"]
             source_officielle = info["source"]
-            
             b_local = info["base_local_mad"]
             b_etranger = info["base_etranger_usd"]
             
@@ -170,15 +111,10 @@ for index, abonne in df_abonnes.iterrows():
                 p_etr = round(b_etranger * taux_usd_mad, 2)
                 
                 donnees_date_globales.append({
-                    "Date": col_j,
-                    "Famille": famille,
-                    "Référence Métal": produit,
-                    "Unité": unite,
-                    "Prix Local (MAD)": p_loc,
-                    "Prix Étranger (MAD)": p_etr,
+                    "Date": col_j, "Famille": famille, "Référence Métal": produit,
+                    "Unité": unite, "Prix Local (MAD)": p_loc, "Prix Étranger (MAD)": p_etr,
                     "Source Unique": source_officielle
                 })
-
                 donnees_csv_globales.append({
                     "Famille": famille, "Matiere": produit, "Unite": unite, "Marche": "Local",
                     "Date": col_j, "Prix_MAD": p_loc, "Source": source_officielle
@@ -191,7 +127,6 @@ for index, abonne in df_abonnes.iterrows():
     df_date_comparatif = pd.DataFrame(donnees_date_globales)
     df_csv_export = pd.DataFrame(donnees_csv_globales)
 
-    # GÉNÉRATION DU FICHIER ATTACHÉ
     if format_souhaite == "csv":
         nom_fichier = f"veille_erp_{nom_fichier_clean}_{date_str}.csv"
         df_csv_export.to_csv(nom_fichier, index=False, encoding="utf-8-sig")
@@ -205,12 +140,8 @@ for index, abonne in df_abonnes.iterrows():
         HEADER_FONT = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
         TITLE_FONT = Font(name="Calibri", size=14, bold=True, color="1F4E79")
         REGULAR_FONT = Font(name="Calibri", size=11)
-        THIN_BORDER = Border(
-            left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'),
-            top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9')
-        )
+        THIN_BORDER = Border(left=Side(style='thin', color='D9D9D9'), right=Side(style='thin', color='D9D9D9'), top=Side(style='thin', color='D9D9D9'), bottom=Side(style='thin', color='D9D9D9'))
         
-        # ONGLET 1 : Comparatif par Date
         ws_date = wb.create_sheet(title="Comparatif par Date")
         ws_date.views.sheetView[0].showGridLines = True
         ws_date["B2"] = f"COMPARATIF DES PRIX PAR DATE (Horizon J+{horizon_i})"
@@ -229,18 +160,10 @@ for index, abonne in df_abonnes.iterrows():
             ws_date.cell(row=r_row, column=3, value=row[1])
             ws_date.cell(row=r_row, column=4, value=row[2])
             ws_date.cell(row=r_row, column=5, value=row[3]).alignment = Alignment(horizontal="center")
-            
-            c_l = ws_date.cell(row=r_row, column=6, value=row[4])
-            c_l.number_format = '#,##0.00'
-            c_e = ws_date.cell(row=r_row, column=7, value=row[5])
-            c_e.number_format = '#,##0.00'
-            
-            c_ecart = ws_date.cell(row=r_row, column=8, value=f"=F{r_row}-G{r_row}")
-            c_ecart.number_format = '#,##0.00'
-            
-            c_choix = ws_date.cell(row=r_row, column=9, value=f'=IF(F{r_row}<=G{r_row},"LOCAL","ETRANGER")')
-            c_choix.alignment = Alignment(horizontal="center")
-            
+            ws_date.cell(row=r_row, column=6, value=row[4]).number_format = '#,##0.00'
+            ws_date.cell(row=r_row, column=7, value=row[5]).number_format = '#,##0.00'
+            ws_date.cell(row=r_row, column=8, value=f"=F{r_row}-G{r_row}").number_format = '#,##0.00'
+            ws_date.cell(row=r_row, column=9, value=f'=IF(F{r_row}<=G{r_row},"LOCAL","ETRANGER")').alignment = Alignment(horizontal="center")
             ws_date.cell(row=r_row, column=10, value=row[6])
             
             for c in range(2, 11):
@@ -248,7 +171,6 @@ for index, abonne in df_abonnes.iterrows():
                 ws_date.cell(row=r_row, column=c).border = THIN_BORDER
             r_row += 1
 
-        # ONGLET 2 : Comparatif par Référence Métal
         ws_ref = wb.create_sheet(title="Comparatif par Référence")
         ws_ref.views.sheetView[0].showGridLines = True
         ws_ref["B2"] = "SYNTHÈSE COMPARATIVE PAR RÉFÉRENCE DE MÉTAL (MOYENNES)"
@@ -267,36 +189,16 @@ for index, abonne in df_abonnes.iterrows():
         
         for ref_m in references_uniques:
             ws_ref.cell(row=r_ref, column=2, value=ref_m)
-            c_ml = ws_ref.cell(row=r_ref, column=3, value=f"=AVERAGEIF('Comparatif par Date'!D5:D{max_date_row}, B{r_ref}, 'Comparatif par Date'!F5:F{max_date_row})")
-            c_ml.number_format = '#,##0.00'
-            c_me = ws_ref.cell(row=r_ref, column=4, value=f"=AVERAGEIF('Comparatif par Date'!D5:D{max_date_row}, B{r_ref}, 'Comparatif par Date'!G5:G{max_date_row})")
-            c_me.number_format = '#,##0.00'
-            c_ec = ws_ref.cell(row=r_ref, column=5, value=f"=C{r_ref}-D{r_ref}")
-            c_ec.number_format = '#,##0.00'
+            ws_ref.cell(row=r_ref, column=3, value=f"=AVERAGEIF('Comparatif par Date'!D5:D{max_date_row}, B{r_ref}, 'Comparatif par Date'!F5:F{max_date_row})").number_format = '#,##0.00'
+            ws_ref.cell(row=r_ref, column=4, value=f"=AVERAGEIF('Comparatif par Date'!D5:D{max_date_row}, B{r_ref}, 'Comparatif par Date'!G5:G{max_date_row})").number_format = '#,##0.00'
+            ws_ref.cell(row=r_ref, column=5, value=f"=C{r_ref}-D{r_ref}").number_format = '#,##0.00'
             ws_ref.cell(row=r_ref, column=6, value=f'=IF(C{r_ref}<=D{r_ref},"Privilégier Local en moyenne","Privilégier Étranger en moyenne")')
-            
-            source_u = df_date_comparatif[df_date_comparatif["Référence Métal"] == ref_m]["Source Unique"].iloc[0]
-            ws_ref.cell(row=r_ref, column=7, value=source_u)
+            ws_ref.cell(row=r_ref, column=7, value=df_date_comparatif[df_date_comparatif["Référence Métal"] == ref_m]["Source Unique"].iloc[0])
             
             for c in range(2, 8):
                 ws_ref.cell(row=r_ref, column=c).font = REGULAR_FONT
                 ws_ref.cell(row=r_ref, column=c).border = THIN_BORDER
             r_ref += 1
-
-        chart = BarChart()
-        chart.type = "col"
-        chart.style = 10
-        chart.title = "Moyenne des Prix : Local vs Étranger"
-        chart.y_axis.title = "Prix en MAD"
-        chart.x_axis.title = "Référence"
-        
-        data_ref_chart = Reference(ws_ref, min_col=3, min_row=4, max_col=4, max_row=r_ref-1)
-        cats = Reference(ws_ref, min_col=2, min_row=5, max_row=r_ref-1)
-        chart.add_data(data_ref_chart, titles_from_data=True)
-        chart.set_categories(cats)
-        chart.width = 18
-        chart.height = 10
-        ws_ref.add_chart(chart, "B12")
 
         for ws in wb.worksheets:
             for col in ws.columns:
@@ -307,18 +209,25 @@ for index, abonne in df_abonnes.iterrows():
         wb.save(nom_fichier)
         sub_type = "vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
-    # ENVOI E-MAIL AVEC GESTION D'ERREUR ET TRACABILITÉ
     try:
         msg = EmailMessage()
         msg['Subject'] = f"📊 Rapport de Veille Stratégique & Décision Achat ({famille_demandee}) - {date_str}"
         msg['From'] = EMAIL_EXPEDITEUR
         msg['To'] = email_client
-        msg.set_content(
+        
+        # Corps du mail avec le disclaimer légal intégré
+        corps_message = (
             f"Bonjour,\n\n"
             f"Veuillez trouver ci-joint votre rapport de veille stratégique personnalisé ({famille_demandee}) au format {format_souhaite.upper()}.\n"
             f"Ce rapport couvre un horizon de prévision de J+{horizon_i} jours et intègre un double comparatif avec des sources officielles unifiées.\n\n"
-            f"Cordialement,\nVotre Agent IA de Veille Marchés"
+            f"Cordialement,\n"
+            f"Votre Agent IA de Veille Marchés\n\n"
+            f"---------------------------------------------------\n"
+            f"AVERTISSEMENT LÉGAL / DISCLAIMER :\n"
+            f"Ce message et ses pièces jointes sont strictement confidentiels et destinés exclusivement à l'usage de son destinataire. "
+            f"Si vous n'êtes pas le destinataire prévu, toute diffusion, copie ou utilisation est strictement interdite."
         )
+        msg.set_content(corps_message)
 
         with open(nom_fichier, "rb") as f:
             file_data = f.read()
@@ -328,49 +237,26 @@ for index, abonne in df_abonnes.iterrows():
             with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
                 smtp.login(EMAIL_EXPEDITEUR, EMAIL_MOT_DE_PASSE)
                 smtp.send_message(msg)
-            print(f"🎉 E-mail envoyé avec succès à {email_client} !")
             
-            # Enregistrement dans la trace de preuve (Historique des envois)
             traces_envois.append({
-                "Date_Heure": timestamp_str,
-                "Destinataire": email_client,
-                "Famille": famille_demandee,
-                "Fichier_Joint": nom_fichier,
-                "Statut": "SUCCES_ENVOI"
+                "Date_Heure": timestamp_str, "Destinataire": email_client,
+                "Famille": famille_demandee, "Fichier_Joint": nom_fichier, "Statut": "SUCCES_ENVOI"
             })
-        else:
-            print(f"🧪 Mode Simulation (Variables d'environnement vides) - Fichier prêt pour {email_client}")
-            traces_envois.append({
-                "Date_Heure": timestamp_str,
-                "Destinataire": email_client,
-                "Famille": famille_demandee,
-                "Fichier_Joint": nom_fichier,
-                "Statut": "SIMULATION_OK"
-            })
-            
     except Exception as e:
-        print(f"❌ Erreur lors de l'envoi vers {email_client} : {e}")
         traces_envois.append({
-            "Date_Heure": timestamp_str,
-            "Destinataire": email_client,
-            "Famille": famille_demandee,
-            "Fichier_Joint": nom_fichier,
-            "Statut": f"ERREUR: {str(e)}"
+            "Date_Heure": timestamp_str, "Destinataire": email_client,
+            "Famille": famille_demandee, "Fichier_Joint": nom_fichier, "Statut": f"ERREUR: {str(e)}"
         })
 
-# --- ÉTAPE 4 : CRÉATION AUTOMATIQUE DU FICHIER DE PREUVE / TRAÇABILITÉ ---
 if traces_envois:
     df_historique = pd.DataFrame(traces_envois)
     fichier_historique = "historique_envois.csv"
-    
-    # Si le fichier existe déjà, on ajoute les nouvelles lignes à la suite
     if os.path.exists(fichier_historique):
         df_ancien = pd.read_csv(fichier_historique)
         df_final_hist = pd.concat([df_ancien, df_historique], ignore_index=True)
     else:
         df_final_hist = df_historique
-        
     df_final_hist.to_csv(fichier_historique, index=False, encoding="utf-8-sig")
-    print(f"📁 Journal de traçabilité mis à jour avec succès : {fichier_historique}")
+    print(f"📁 Journal de traçabilité mis à jour : {fichier_historique}")
 
-print("=== [FIN] Traitement global et traçabilité terminés avec succès ===")
+print("=== [FIN] Traitement global terminé ===")
